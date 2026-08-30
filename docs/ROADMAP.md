@@ -36,25 +36,35 @@ Email + password only (no OAuth / magic-link-only / phone):
 - Safe `?next=` sanitizer; profile provisioning trigger
 - See [`AUTH.md`](./AUTH.md) for dashboard setup and the manual QA list
 
-## Phase 2 — Profile & resume
+## Phase 2 — Profile & resume *(complete, live-verified)*
 
-- Onboarding: name, headline, city, country, years of experience.
-- Resume upload to the private `resumes` bucket.
-- Basic resume parser (server-side) → `resume_skills`.
-- Job preferences form.
+- Onboarding: resume upload → local parse → profile review → preferences.
+- Private Storage upload, generated paths, retryable parse failures.
+- Canonical skill taxonomy seed (~75 skills) + `resume_skills`.
+- `/profile` and a completed `/home` greeting. No job matching yet.
+- Details: [`PROFILE_RESUME.md`](./PROFILE_RESUME.md).
 
-## Phase 3 — Job engine (core)
+## Phase 3 — Job engine (core) *(complete and live-verified)*
 
-- Canonical `Skill` taxonomy seed.
-- Deterministic job fingerprinting + upsert flow.
-- Job read APIs (server-only) used by Phase 5 UI.
+- Provider-neutral adapter contract + synthetic adapter (tests/dev only).
+- Normalized job schema, sanitization, URL validation, company resolution.
+- Canonical jobs + `job_source_postings` provenance.
+- Fingerprint (candidate, not unique), content hash, conservative dedupe.
+- Lifecycle (`open` → `possibly_closed` → `closed`) with complete-snapshot
+  misses only. Source failures never mass-close.
+- Sync orchestrator, metrics JSON, backoff helper (no cron).
+- Details: [`JOB_ENGINE.md`](./JOB_ENGINE.md).
 
 ## Phase 4 — Job sources
 
-- Adapter contract implemented.
-- Adapters: Greenhouse, Lever, Ashby, We Work Remotely.
-- Scheduler / cron for `next_sync_at`.
-- Populates `source_sync_runs` for ops visibility.
+- **4A Greenhouse** — public Job Board API adapter, curated seed
+  (`0006`), `pnpm jobs:greenhouse`. See
+  [`JOB_SOURCE_GREENHOUSE.md`](./JOB_SOURCE_GREENHOUSE.md).
+- **4B Lever** — public Postings API v0 adapter, curated seed (`0007`),
+  `pnpm jobs:lever`. See [`JOB_SOURCE_LEVER.md`](./JOB_SOURCE_LEVER.md).
+- 4C+ Ashby, We Work Remotely (not started).
+- Scheduler / cron for `next_sync_at` (not in 4A/4B).
+- Live persistence uses Phase 3 `SupabaseJobStore` + `SUPABASE_SECRET_KEY`.
 
 ## Phase 5 — Discovery UI
 

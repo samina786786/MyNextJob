@@ -12,6 +12,7 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  serverExternalPackages: ['unpdf', 'mammoth', 'sanitize-html'],
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '**.supabase.co' },

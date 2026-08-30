@@ -21,7 +21,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm exec next start --port 3939',
+    command: 'node node_modules/next/dist/bin/next start -p 3939',
     port: PORT,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

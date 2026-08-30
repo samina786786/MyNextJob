@@ -8,37 +8,77 @@ checklist below.
 
 ## Phase 1.1 status (2026-08-30)
 
-`@supabase/ssr` was upgraded **0.5.2 → 0.12.5**. Proxy and server
-clients use the official two-argument `setAll(cookies, headers)`
-contract. Cache headers from the package (`Cache-Control`, `Expires`,
-`Pragma`) are copied onto the Next.js Proxy response. There is no
-manual fallback header map.
+`@supabase/ssr` is **0.12.5** (already current stable 0.12.x; no further
+upgrade). Proxy and server clients use the official two-argument
+`setAll(cookies, headers)` contract. When the package emits cache
+headers (`Cache-Control`, `Expires`, `Pragma`), `src/lib/supabase/proxy.ts`
+copies them onto the Next.js Proxy response. There is no manual
+fallback header map.
 
-**A real development Supabase project was not connected in this
-environment.** `.env.local` was not present, `NEXT_PUBLIC_SUPABASE_*`
-was unset, and the Supabase CLI was not installed. Credentials were
-not invented. Live signup, email, RLS, cookie, and dashboard checks
-remain **unverified**.
+**A real development project is connected** via `.env.local`
+(`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+`NEXT_PUBLIC_SITE_URL=http://localhost:3000`). Credentials are not
+logged here.
 
-### What was proven automatically
+### Automated tests (this pass)
 
-- Lint, typecheck, unit tests, production build, and Playwright E2E
-  (unconfigured / no live credentials) after the SSR upgrade.
-- Route-level behavior that does not need a live project: form
-  validation, `sanitizeNext()` rejection of external `next` values,
-  anonymous `/home` → `/sign-in`, reset page without a session does
-  not offer `updateUser({ password })`.
+- Lint, typecheck, and 30 unit tests passed.
+- Production build passed (`.env.local` loaded).
+- Playwright E2E: form validation, `sanitizeNext()`, anonymous
+  `/home` → `/sign-in?next=%2Fhome`, unauthenticated `/reset-password`
+  (no `updateUser` form), invalid `/auth/confirm` → `/error` without
+  `token_hash`, generic forgot-password inbox copy, clay sign-in error
+  without SDK dumps.
 
-### What still requires a human + Dashboard
+### Live project probes (HTTP, not Node `fetch`)
 
-- Applying `0001` then `0002` on the development project
-- Email provider, confirm-email, Site URL, redirect allow-list
-- Confirm-signup template (`token_hash` SSR link)
-- Live signup → inbox → `/auth/confirm` → `/home`
-- Profile trigger + real RLS with a second user
-- Session refresh, cookies, cache headers on a live refresh
-- Password recovery end-to-end
-- Custom production SMTP
+Proven against the hosted Auth/Data API:
+
+- Auth is healthy. Email/password is on. Signup is allowed.
+  Confirm-email is on (`mailer_autoconfirm` false). OAuth and phone
+  are off.
+- `public.profiles` and `public.jobs` exist. Anonymous `SELECT` is
+  denied (`42501`) — expected until `0003` grants `authenticated`.
+- The private `resumes` storage bucket is **missing**.
+- Anonymous `/home` returns `307` to `/sign-in?next=%2Fhome` with
+  `Cache-Control: no-cache, must-revalidate` (not public-cacheable).
+- Invalid confirm redirects to `/error` and does not keep `token_hash`
+  on the Location header.
+
+### Not verified live
+
+This agent could not apply SQL or finish the inbox lifecycle:
+
+- No Supabase CLI, no access token, no database password, no
+  service-role key (correct — it is not in `NEXT_PUBLIC_*`).
+- Cursor Supabase MCP is configured but not signed in.
+- Avast HTTPS scanning re-signs `*.supabase.co` with a local root
+  Windows trusts and Node 22.13 does not. `pnpm dev` / `pnpm start` /
+  `pnpm test:e2e` run through `scripts/with-system-ca.mjs`, which loads
+  the Windows CA store via `NODE_EXTRA_CA_CERTS` (TLS verification stays
+  on). You can also turn off Avast “HTTPS scanning” so Node sees the
+  real certificate chain.
+- `0001` looks partially applied (tables exist, bucket does not).
+  `0002` trigger and `0003` Data API grants are **not confirmed**.
+- Dashboard Site URL, redirect allow-list, and Confirm signup
+  template cannot be read from the public Auth settings API.
+- Signup → inbox → `/auth/confirm` → `/home` was not completed.
+- Profile row + two-user RLS was not completed.
+- Signed-in session refresh, cookie names/values, and password reset
+  email were not completed.
+- Custom production SMTP is still pending.
+
+### Apply on the development project
+
+Run in order in the SQL Editor, or `supabase db push` once the CLI
+is linked:
+
+1. `supabase/migrations/0001_initial_schema.sql` (creates the
+   `resumes` bucket if missing)
+2. `supabase/migrations/0002_auth_profile_provisioning.sql`
+3. `supabase/migrations/0003_data_api_grants.sql` (explicit
+   `authenticated` grants; required on projects that no longer
+   auto-expose `public` tables)
 
 ---
 
@@ -139,8 +179,13 @@ Never put the service-role key in a `NEXT_PUBLIC_*` variable.
 ## Supabase Dashboard setup
 
 These steps cannot be applied from the repo. Do them in the project
-dashboard. **Not verified live in Phase 1.1** (no project credentials
-in the agent environment).
+dashboard.
+
+**Verified from the public Auth settings API (2026-08-30):** Email
+provider on, confirm-email on, signup enabled, OAuth/phone off.
+
+**Not readable from the API — still a Dashboard check:** Site URL,
+redirect allow-list, Confirm signup template, reset-password redirect.
 
 ### 1. Authentication provider
 
@@ -209,18 +254,24 @@ part of Phase 1.1.
 supabase db push
 ```
 
-or run `0001_initial_schema.sql` then
-`0002_auth_profile_provisioning.sql` in the SQL editor.
+or run `0001_initial_schema.sql`, then
+`0002_auth_profile_provisioning.sql`, then
+`0003_data_api_grants.sql` in the SQL editor.
 
-Schema expectations after both files:
+Schema expectations after all three files:
 
 - `public.profiles` exists; RLS enabled; owner-only policies
+- `authenticated` has explicit table grants (`0003`); `anon` does not
+  get user-owned tables
 - `handle_new_user()` is `security definer` with `search_path = public`
+- `EXECUTE` on `handle_new_user()` is revoked from `public` / `anon` /
+  `authenticated`
 - `on_auth_user_created` trigger on `auth.users`
 - `on conflict (id) do nothing` prevents duplicate profile rows
 - `storage.buckets.resumes` is **private** (`public = false`), PDF/DOCX only
 
-**Not applied from this environment** — no linked project.
+**Not fully applied from this environment** — no linked CLI project.
+Tables exist; the `resumes` bucket does not.
 
 ## Automated tests
 
@@ -232,7 +283,7 @@ These do **not** require a live Supabase project:
 | Types | `pnpm typecheck` | Including 0.12.5 `setAll` types |
 | Unit | `pnpm test` | Zod schemas, `sanitizeNext()`, safe error mapping |
 | Build | `pnpm build` | Next.js production compile |
-| E2E | `pnpm test:e2e` | Auth form UX, unsafe `next`, anonymous `/home` |
+| E2E | `pnpm test:e2e` | Auth form UX, unsafe `next`, anonymous `/home`, expired reset, invalid confirm, clay sign-in error |
 
 Do not add E2E that waits on confirmation email delivery.
 

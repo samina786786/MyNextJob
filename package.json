@@ -5,19 +5,22 @@
   "description": "MyNextJob — Your next opportunity starts here.",
   "packageManager": "pnpm@9.12.0",
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22"
   },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "node scripts/with-system-ca.mjs next dev",
+    "build": "node scripts/with-system-ca.mjs next build",
+    "start": "node scripts/with-system-ca.mjs next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/with-system-ca.mjs playwright test",
     "test:e2e:install": "playwright install --with-deps",
+    "jobs:synthetic": "vitest run tests/unit/jobs",
+    "jobs:greenhouse": "node scripts/with-system-ca.mjs node scripts/jobs-greenhouse.mjs",
+    "jobs:lever": "node scripts/with-system-ca.mjs node scripts/jobs-lever.mjs",
     "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
@@ -27,11 +30,15 @@
     "clsx": "^2.1.1",
     "geist": "^1.7.2",
     "lucide-react": "^0.454.0",
+    "mammoth": "^1.12.2",
     "motion": "^11.11.11",
     "next": "^16.3.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "sanitize-html": "^2.17.7",
+    "server-only": "^0.0.1",
     "tailwind-merge": "^2.5.4",
+    "unpdf": "^1.8.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -43,6 +50,7 @@
     "@types/node": "^20.16.11",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
+    "@types/sanitize-html": "^2.16.1",
     "@vitejs/plugin-react": "^4.3.2",
     "eslint": "^9.15.0",
     "eslint-config-next": "^16.3.3",

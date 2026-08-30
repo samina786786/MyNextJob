@@ -28,3 +28,25 @@ export function getSiteUrl(): string {
   if (configured) return configured;
   return 'http://localhost:3000';
 }
+
+/**
+ * Server-only secret key for privileged Job Engine writes.
+ * Prefer `SUPABASE_SECRET_KEY` (sb_secret_…). Legacy
+ * `SUPABASE_SERVICE_ROLE_KEY` is accepted as a fallback.
+ * Never read this from a NEXT_PUBLIC_* variable. Unit tests do not
+ * require either key.
+ */
+export function getSupabaseSecretEnv(): {
+  secretKey: string;
+  isConfigured: boolean;
+} {
+  const secretKey = (
+    process.env.SUPABASE_SECRET_KEY ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    ''
+  ).trim();
+  return {
+    secretKey,
+    isConfigured: secretKey.length > 0,
+  };
+}

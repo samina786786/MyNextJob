@@ -23,7 +23,12 @@ export function SampleJobCard({ job }: { job: SampleJob }) {
       <ClayCard depth="raised" radius="xl" padding="lg" className="space-y-4">
         <header className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
-            <p className="truncate text-sm font-medium text-secondary">{job.company}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate text-sm font-medium text-secondary">{job.company}</p>
+              <ClayBadge tone="neutral" size="sm">
+                Preview
+              </ClayBadge>
+            </div>
             <h3 className="text-[17px] font-semibold leading-tight text-foreground">
               {job.role}
             </h3>

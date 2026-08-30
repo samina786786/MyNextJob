@@ -31,7 +31,8 @@ user's resume, and notifies them when strong matches appear.
 - **Next.js App Router** on the current stable Active LTS line
   (**Next.js 16.x, React 19**). Never downgrade the framework without
   explicit written authorization.
-- **Node.js ≥ 20.9** — declared in `package.json#engines`.
+- **Node.js ≥ 22** — declared in `package.json#engines` (resume parsing
+  and the Job Engine require Node 22).
 - **Strict TypeScript**, **Server Components by default**. `"use client"`
   only when there's a real need.
 - **Tailwind CSS v4** using `@tailwindcss/postcss` and the `@theme` block
@@ -96,11 +97,87 @@ Before every future task:
 ## Scope control
 
 - Do **not** implement work from later phases unless explicitly instructed.
-- Phase 1 (Authentication) is implemented. Do not add resume upload,
-  onboarding, job ingestion, or matching here.
+- Phase 3 (Job Engine) is implemented. Phase 4A is Greenhouse. Phase 4B
+  is Lever. Do not add Ashby, WWR, matching, notifications, applications,
+  job-feed UI, cron, or AI unless a later phase asks for it.
 - Phases: 0 Foundation · 1 Auth · 2 Profile+Resume · 3 Job Engine ·
   4 Sources · 5 Discovery UI · 6 Matching · 7 Applications ·
   8 Notifications · 9 PWA/Offline · 10 Production QA.
+
+## Resume parsing (Phase 2 invariants)
+
+- Resume parsing is **server-side only** (Node runtime, `server-only`,
+  never imported into Client Components).
+- V1 accepts **PDF and DOCX only**, **10 MB max**.
+- Private `resumes` Storage only. Object paths are `{user_id}/{uuid}.ext`.
+- **No public resume URLs.** Signed URLs are short-lived and not stored.
+- No third-party resume parser, OCR, or paid AI API without explicit
+  written approval. Extraction is local (`unpdf` + `mammoth` raw text).
+- Extracted profile data is always user-reviewable. **Manual edits beat
+  parser suggestions.** Never silently overwrite confirmed profile fields.
+- Canonical `skills` ids beat free-text duplicates.
+- Never log resume contents, emails, or file bytes.
+- No OCR in V1. Scanned PDFs should fail with a helpful warning.
+
+## Job Engine (Phase 3 invariants)
+
+- Every external job source must implement `JobSourceAdapter`. Adapters
+  fetch and map only — they never write to the database.
+- Frontend never consumes provider-specific payloads (no Greenhouse /
+  Lever / Ashby field names). The engine contract is `NormalizedJobInput`.
+- Source identity is `(source_id, external_id)` on `job_source_postings`.
+  That pair is unique and is the first idempotency layer.
+- `jobs.fingerprint` is a duplicate **candidate**, not a unique identity.
+  Two legitimate openings may share company + title + location.
+- Preserve source provenance. One canonical job may have 1..N source
+  postings. Do not drop `jobs.source_id` / `jobs.external_id`; they are
+  original-source compatibility fields.
+- Sanitize all external job HTML server-side (`sanitize-html`). Never
+  trust raw apply/source URLs — HTTP/HTTPS only.
+- A source sync failure must never mass-close jobs. Only **complete**
+  snapshots increment missing-job lifecycle counters.
+- Ingestion writes remain server/backend-only. Use `SUPABASE_SECRET_KEY`
+  (never `NEXT_PUBLIC_*`). Phase 3 unit tests use an in-memory store and
+  do not require the secret. `SupabaseJobStore` is the production
+  persistence contract for Phase 4 adapters.
+- Do not add `synthetic` to the live `source_type` enum.
+- See [`docs/JOB_ENGINE.md`](docs/JOB_ENGINE.md).
+
+## Greenhouse discovery (Phase 4A invariants)
+
+- Greenhouse discovery uses the **public GET** Job Board API only.
+  Hostname is fixed: `https://boards-api.greenhouse.io`.
+- **No Greenhouse API key** for discovery. Do not send Authorization,
+  Basic Auth, Supabase secrets, or cookies to Greenhouse.
+- Board token comes from `job_sources.external_identifier`. Never
+  hard-code company tokens in adapter logic.
+- Greenhouse `id` is the source-posting identity (`externalId` string).
+  `internal_job_id` is metadata only (null is valid for prospect posts).
+- `updated_at` must not masquerade as `published_at`. Phase 4A leaves
+  `publishedAt` null unless a genuine first-published value exists.
+- Ingest the **full** public board snapshot. Do not filter by candidate
+  skills, location preference, or resume inside the adapter.
+- Greenhouse `content` always passes through the generic Phase 3
+  sanitizer. Do not add a second sanitizer or a Greenhouse table.
+- See [`docs/JOB_SOURCE_GREENHOUSE.md`](docs/JOB_SOURCE_GREENHOUSE.md).
+
+## Lever discovery (Phase 4B invariants)
+
+- Lever discovery uses the **public Postings API v0** only.
+- **No Lever API key** for GET discovery. Never implement Lever
+  application POST during ingestion.
+- Site identifier comes from `job_sources.external_identifier`.
+- Instance must be controlled `metadata.lever_instance` = `global` | `eu`.
+  Never use an arbitrary metadata URL as the request host.
+- The adapter owns `skip`/`limit` pagination. Only naturally completed
+  pagination is a complete snapshot. Safety caps force incomplete.
+- Lever `id` is the source-posting identity (`externalId` string).
+- `workplaceType` beats inferred work mode. Unknown commitment stays
+  unknown. `publishedAt` is not invented.
+- Descriptions (`description` + `lists` + `additional`) always pass
+  through the generic Phase 3 sanitizer. Fetch the full site snapshot.
+- No Lever-specific database schema.
+- See [`docs/JOB_SOURCE_LEVER.md`](docs/JOB_SOURCE_LEVER.md).
 
 ## When in doubt
 
@@ -108,3 +185,13 @@ Before every future task:
 - No comments narrating obvious React. Comment *why*, not *what*.
 - No magic hex colors in components — use semantic tokens.
 - No premature abstractions or "enterprise" architecture.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

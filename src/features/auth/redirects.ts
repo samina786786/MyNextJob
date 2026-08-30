@@ -2,7 +2,7 @@
  * Safe internal destinations for `?next=`. Anything that is not an
  * allow-listed same-origin path falls back to `/home`.
  */
-const ALLOWED_PREFIXES = ['/home', '/profile', '/saved', '/activity', '/search'] as const;
+const ALLOWED_PREFIXES = ['/home', '/profile', '/saved', '/activity', '/search', '/onboarding'] as const;
 
 export const DEFAULT_AUTH_REDIRECT = '/home';
 

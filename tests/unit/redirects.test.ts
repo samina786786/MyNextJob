@@ -7,6 +7,8 @@ describe('sanitizeNext', () => {
     expect(sanitizeNext('/profile')).toBe('/profile');
     expect(sanitizeNext('/saved')).toBe('/saved');
     expect(sanitizeNext('/search')).toBe('/search');
+    expect(sanitizeNext('/onboarding/resume')).toBe('/onboarding/resume');
+    expect(sanitizeNext('/onboarding/profile')).toBe('/onboarding/profile');
   });
 
   it('rejects external and protocol-relative URLs', () => {

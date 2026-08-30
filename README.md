@@ -6,10 +6,13 @@ MyNextJob is a mobile-first, installable job-search PWA. It discovers fresh
 jobs from company ATS/career systems and public feeds, matches them against
 your resume, and notifies you the moment your next opportunity appears.
 
-**Current phase: Phase 1 — Authentication.** Email + password signup,
-confirmation, sign-in, reset, and sign-out. No resume upload, matching,
-or job ingestion yet. See [`docs/ROADMAP.md`](docs/ROADMAP.md) and
-[`docs/AUTH.md`](docs/AUTH.md).
+**Current phase: Phase 4B — Lever Postings API source.**
+The Phase 3 Job Engine is live. Greenhouse and Lever public boards
+ingest through the same adapter contract. See
+[`docs/JOB_SOURCE_GREENHOUSE.md`](docs/JOB_SOURCE_GREENHOUSE.md) and
+[`docs/JOB_SOURCE_LEVER.md`](docs/JOB_SOURCE_LEVER.md).
+`/home` remains the Phase 2 profile-ready experience — ingested jobs
+are not shown to users yet.
 
 ## Stack
 
@@ -28,8 +31,8 @@ or job ingestion yet. See [`docs/ROADMAP.md`](docs/ROADMAP.md) and
 
 ## Prerequisites
 
-- **Node.js 20.9+** (enforced via `package.json#engines`; `.nvmrc` pins
-  Node 22, the current supported LTS used in development)
+- **Node.js 22+** (enforced via `package.json#engines`; `.nvmrc` pins
+  Node 22)
 - **pnpm 9+** (`corepack enable && corepack prepare pnpm@latest --activate`)
 - A [Supabase](https://supabase.com) project with Email/Password enabled
   (see [`docs/AUTH.md`](docs/AUTH.md)). The UI still renders without
@@ -59,6 +62,9 @@ pnpm test:watch       # Vitest in watch mode
 pnpm build            # production build
 pnpm start            # serve the production build
 pnpm test:e2e         # Playwright smoke suite
+pnpm jobs:synthetic   # In-memory Job Engine exercise (no live DB)
+pnpm jobs:greenhouse --source=dscout --dry-run  # Greenhouse fetch, no writes
+pnpm jobs:lever --source=drivetrain --dry-run   # Lever fetch, no writes
 ```
 
 Playwright browsers must be installed once:
@@ -95,7 +101,9 @@ src/
 ├── app/                     # App Router routes
 │   ├── (public)/            # Landing (`/`)
 │   ├── (auth)/              # Sign-in, sign-up, reset
-│   ├── (app)/home/          # Protected `/home`
+│   ├── (app)/               # Protected app (auth layout)
+│   │   ├── (shell)/         # `/home`, `/profile` with bottom nav
+│   │   └── onboarding/      # Resume → profile → preferences
 │   ├── auth/confirm         # Email OTP verification
 │   ├── auth/callback        # PKCE code exchange
 │   ├── design-system/       # Internal visual QA
@@ -108,19 +116,25 @@ src/
 │   ├── home/                # Home-preview client bits
 │   └── jobs/                # SampleJobCard (visual-only)
 ├── features/auth/           # Actions, schemas, safe redirects, forms
+├── features/onboarding/     # Resume upload, profile review, preferences
 ├── lib/
 │   ├── supabase/            # Browser / server client + session refresh
 │   ├── auth/                # getClaims() identity helpers
+│   ├── jobs/                # Job Engine (adapters, normalize, persist, sync)
+│   ├── resume/              # Local PDF/DOCX parse + validation
+│   ├── onboarding/          # Progress derivation + queries
+│   ├── skills/              # Canonical taxonomy seed list
 │   └── validation/          # Zod schemas used at trust boundaries
 └── proxy.ts                 # Next.js 16 session-refresh entry
 supabase/
-└── migrations/              # 0001 + 0002 (profile provisioning) + RLS
+└── migrations/              # 0001–0005 (schema, auth trigger, grants, skills, job engine)
 scripts/
 └── generate-icons.mjs       # PWA icon generator (sharp)
 tests/
+├── fixtures/                # Fictional Alex Candidate PDF/DOCX
 ├── unit/                    # Vitest
 └── e2e/                     # Playwright
-docs/                        # Architecture, design system, database, roadmap
+docs/                        # Architecture, design system, database, roadmap, profile/resume
 ```
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how the pieces fit
@@ -139,12 +153,18 @@ together and [`docs/DATABASE.md`](docs/DATABASE.md) for the schema.
    supabase db push
    ```
 
-   Or paste `supabase/migrations/0001_initial_schema.sql` into the SQL
-   editor. The migration also creates the private `resumes` storage bucket
-   (PDF/DOCX only, 10 MB cap) with owner-only object policies.
+   Or paste each file in `supabase/migrations/` into the SQL Editor, in
+   order (`0001` … `0007`). Phase 2 needs `0004` for the skill catalog
+   and the `freelance` employment type. Phase 3 needs `0005` for
+   `job_source_postings` and job lifecycle columns. Phase 4A needs
+   `0006` for curated Greenhouse companies/sources. Phase 4B needs
+   `0007` for curated Lever companies/sources — review both before
+   applying. Do not skip grants in `0003` / `0004` / `0005` — Data API
+   auto-expose is off.
 
 ## Contributing to Phase 0
 
 - Server Components by default; `"use client"` only when justified.
 - All new UI must use semantic tokens, not raw hex.
-- Do not implement features from Phases 1+ here. See [`CLAUDE.md`](CLAUDE.md).
+- Do not implement Lever/Ashby/WWR, job UI, matching, or cron here.
+  See [`CLAUDE.md`](CLAUDE.md).
