@@ -1,0 +1,6 @@
+# shadcn/ui components land here when installed via
+#   pnpm dlx shadcn@latest add <component>
+#
+# We deliberately have not pre-installed the whole library — components are
+# added on demand as features need them. Every component installed here must
+# still consume the semantic clay tokens defined in `src/app/globals.css`.

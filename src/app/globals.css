@@ -1,0 +1,207 @@
+@import "tailwindcss";
+
+/* =============================================================================
+   MyNextJob — Design Tokens (Tailwind v4 `@theme`)
+   =============================================================================
+   Every token becomes a real CSS custom property AND a Tailwind utility.
+   Feature components must always consume these semantic aliases (e.g.
+   `bg-surface-raised`, `text-primary-deep`), never raw hex.
+   =========================================================================== */
+
+@theme {
+  /* ---------- Fonts (Geist wired up in layout.tsx) ---------- */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo,
+    Consolas, "Liberation Mono", monospace;
+
+  /* ---------- Breakpoints ---------- */
+  --breakpoint-xs: 360px;
+
+  /* ---------- Surfaces (warm ivory foundation) ---------- */
+  --color-background: #f6f3ea;
+  --color-surface: #f3f0e7;
+  --color-surface-raised: #faf8f2;
+  --color-surface-pressed: #e6e1d2;
+  --color-surface-strong: #ece8dc;
+
+  /* ---------- Foreground / text ---------- */
+  --color-foreground: #202925;
+  --color-secondary: #65716b;
+  --color-secondary-foreground: #202925;
+  --color-muted: #ece8dc;
+  --color-muted-foreground: #89938e;
+
+  /* ---------- Emerald primary ---------- */
+  --color-primary: #059669;
+  --color-primary-foreground: #faf8f2;
+  --color-primary-bright: #10b981;
+  --color-primary-deep: #047857;
+  --color-primary-dark: #065f46;
+  --color-primary-soft: #ddf5ea;
+  --color-primary-faint: #ecf8f2;
+
+  /* ---------- Borders & separators ---------- */
+  --color-border: #dce2dc;
+
+  /* ---------- Status ---------- */
+  --color-success: #10b981;
+  --color-warning: #f5a524;
+  --color-warning-soft: #fbeecd;
+  --color-warning-deep: #7a4a10;
+  --color-destructive: #e05169;
+  --color-destructive-foreground: #faf8f2;
+  --color-destructive-soft: #fbe0e5;
+  --color-destructive-deep: #8b2a3a;
+
+  /* ---------- Clay radius scale ---------- */
+  --radius-clay-sm: 14px;
+  --radius-clay-md: 18px;
+  --radius-clay-lg: 22px;
+  --radius-clay-xl: 26px;
+  --radius-clay-2xl: 30px;
+
+  /* ---------- Clay depth system ----------
+     Every raised surface conceptually combines:
+       - a soft cool shadow toward the bottom-right
+       - a soft warm highlight toward the top-left
+       - an optional inset highlight to give it that molded feel.
+     Pressed inverts to inset shadows.
+  */
+  --shadow-clay-soft:
+    0 1px 2px rgba(51, 66, 58, 0.05),
+    0 2px 6px rgba(51, 66, 58, 0.06);
+
+  --shadow-clay-raised:
+    -6px -6px 14px rgba(255, 253, 243, 0.85),
+    8px 10px 22px rgba(51, 66, 58, 0.12),
+    inset 0 1px 0 rgba(255, 253, 243, 0.6);
+
+  --shadow-clay-floating:
+    -8px -8px 20px rgba(255, 253, 243, 0.9),
+    14px 18px 34px rgba(51, 66, 58, 0.16),
+    inset 0 1px 0 rgba(255, 253, 243, 0.7);
+
+  --shadow-clay-pressed:
+    inset 4px 4px 10px rgba(51, 66, 58, 0.14),
+    inset -4px -4px 10px rgba(255, 253, 243, 0.7);
+
+  /* ---------- shadcn/ui aliases ----------
+     Mapped onto existing clay tokens so `pnpm dlx shadcn@latest add …`
+     lands on the MyNextJob palette instead of inventing new colors.
+     `secondary` stays a muted text color (not a surface) — that is
+     intentional and must not be overwritten to match shadcn defaults.
+  */
+  --color-card: #faf8f2;
+  --color-card-foreground: #202925;
+  --color-popover: #faf8f2;
+  --color-popover-foreground: #202925;
+  --color-accent: #ddf5ea;
+  --color-accent-foreground: #047857;
+  --color-input: #e6e1d2;
+  --color-ring: #10b981;
+  --radius: 14px;
+
+  /* ---------- Animations ---------- */
+  --animate-clay-shimmer: clay-shimmer 1.6s linear infinite;
+
+  @keyframes clay-shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+}
+
+/* =============================================================================
+   Global base
+   =========================================================================== */
+@layer base {
+  * {
+    border-color: var(--color-border);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    min-height: 100dvh;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary-bright);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Respect reduced motion at the platform level. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* =============================================================================
+   Reusable helpers
+   ============================================================================
+   Prefer the <Clay*> React components in TSX; these classes exist so ad-hoc
+   markup can opt in without repeating shadow strings.
+*/
+@utility clay-surface {
+  background-color: var(--color-surface-raised);
+  border-radius: var(--radius-clay-lg);
+  box-shadow: var(--shadow-clay-raised);
+}
+
+@utility clay-surface-pressed {
+  background-color: var(--color-surface-pressed);
+  border-radius: var(--radius-clay-lg);
+  box-shadow: var(--shadow-clay-pressed);
+}
+
+@utility clay-surface-floating {
+  background-color: var(--color-surface-raised);
+  border-radius: var(--radius-clay-xl);
+  box-shadow: var(--shadow-clay-floating);
+}
+
+@utility clay-skeleton {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-surface-pressed) 0%,
+    var(--color-surface-strong) 40%,
+    var(--color-surface-pressed) 80%
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-clay-shimmer);
+  border-radius: var(--radius-clay-md);
+}
+
+/* Safe-area helpers for PWA installability on notched devices. */
+@utility safe-top {
+  padding-top: max(1rem, env(safe-area-inset-top));
+}
+@utility safe-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+@utility safe-x {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
