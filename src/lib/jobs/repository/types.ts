@@ -154,6 +154,7 @@ export interface JobEngineStore {
   findCompanyById(id: string): Promise<CompanyRecord | null>;
   findCompanyByDomain(domain: string): Promise<CompanyRecord | null>;
   findCompanyByNameKey(nameKey: string): Promise<CompanyRecord | null>;
+  findCompaniesByNameKey(nameKey: string): Promise<CompanyRecord[]>;
   insertCompany(input: InsertCompanyInput): Promise<CompanyRecord>;
 
   getJobSource(id: string): Promise<JobSourceRecord | null>;
@@ -178,6 +179,12 @@ export interface JobEngineStore {
   findCanonicalCandidates(fingerprint: string): Promise<CanonicalJobRecord[]>;
   insertCanonicalJob(input: InsertCanonicalJobInput): Promise<CanonicalJobRecord>;
   updateCanonicalJob(id: string, patch: Partial<CanonicalJobRecord>): Promise<CanonicalJobRecord>;
+  deleteCanonicalJob(id: string): Promise<void>;
+  touchUnchangedSightings(input: {
+    postingIds: string[];
+    jobIds: string[];
+    now: Date;
+  }): Promise<void>;
 
   startSyncRun(sourceId: string): Promise<SyncRunRecord>;
   finishSyncRun(

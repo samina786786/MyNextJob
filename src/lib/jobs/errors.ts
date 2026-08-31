@@ -48,6 +48,23 @@ export function isUniqueViolation(error: unknown): boolean {
   return error instanceof PersistenceError && error.pgCode === '23505';
 }
 
+export class StaleAdmissionError extends JobEngineError {
+  readonly externalId?: string;
+
+  constructor(externalId?: string) {
+    super('Job is outside the 30-day active catalog window', 'stale_skipped');
+    this.name = 'StaleAdmissionError';
+    this.externalId = externalId;
+  }
+}
+
+export class FeedCursorError extends JobEngineError {
+  constructor(message = 'Feed cursor is invalid') {
+    super(message, 'invalid_cursor');
+    this.name = 'FeedCursorError';
+  }
+}
+
 const SECRETISH = /authorization|bearer\s+\S+|api[_-]?key|secret|password|cookie/gi;
 
 export function sanitizeErrorMessage(error: unknown): string {

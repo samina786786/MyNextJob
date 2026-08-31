@@ -90,6 +90,29 @@ describe('Lever adapter pagination', () => {
     expect(result.metadata?.duplicateIds).toBe(1);
   });
 
+  it('retries a 200 HTML body that is not JSON', async () => {
+    let calls = 0;
+    const adapter = new LeverAdapter({
+      site: 'drivetrain',
+      fetchImpl: async () => {
+        calls += 1;
+        if (calls === 1) {
+          return new Response('<html>oops</html>', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify([leverJobFixture()]), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    });
+    const result = await adapter.fetchJobs(CONTEXT);
+    expect(result.jobs).toHaveLength(1);
+    expect(calls).toBe(2);
+  });
+
   it('uses metadata.lever_instance and rejects arbitrary hosts', async () => {
     const seen: string[] = [];
     const adapter = new LeverAdapter({

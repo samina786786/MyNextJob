@@ -27,6 +27,9 @@ function createFakeSupabase(seed: Record<string, Row[]> = {}) {
       const filters: { col: string; val: unknown }[] = [];
       let pendingInsert: Row | null = null;
       let pendingUpdate: Row | null = null;
+      let range: { from: number; to: number } | null = null;
+      let orderCol: string | null = null;
+      let orderAsc = true;
 
       const execute = async () => {
         const rows = tables[table] ?? [];
@@ -77,7 +80,23 @@ function createFakeSupabase(seed: Record<string, Row[]> = {}) {
           Object.assign(first, pendingUpdate, { updated_at: new Date().toISOString() });
           return { data: first, error: null };
         }
-        return { data: applyFilters(rows, filters), error: null };
+        let matched = applyFilters(rows, filters);
+        if (orderCol) {
+          const col = orderCol;
+          matched = [...matched].sort((a, b) => {
+            const av = String(a[col] ?? '');
+            const bv = String(b[col] ?? '');
+            if (av === bv) return 0;
+            const cmp = av < bv ? -1 : 1;
+            return orderAsc ? cmp : -cmp;
+          });
+        }
+        if (range) {
+          matched = matched.slice(range.from, range.to + 1);
+        }
+        // PostgREST default max-rows. A single SELECT without paging truncates.
+        if (matched.length > 1000) matched = matched.slice(0, 1000);
+        return { data: matched, error: null };
       };
 
       const query: Record<string, unknown> = {
@@ -92,6 +111,15 @@ function createFakeSupabase(seed: Record<string, Row[]> = {}) {
         },
         eq: (col: string, val: unknown) => {
           filters.push({ col, val });
+          return query;
+        },
+        order: (col: string, opts?: { ascending?: boolean }) => {
+          orderCol = col;
+          orderAsc = opts?.ascending !== false;
+          return query;
+        },
+        range: (from: number, to: number) => {
+          range = { from, to };
           return query;
         },
         maybeSingle: async () => {
@@ -242,6 +270,27 @@ describe('SupabaseJobStore', () => {
     expect(existing?.name).toBe('Acme Technologies');
   });
 
+  it('round-trips a WWR source with company_id null', async () => {
+    const { client, tables } = createFakeSupabase();
+    const store = new SupabaseJobStore(client);
+    const source = await store.insertJobSource({
+      name: 'We Work Remotely — All Jobs',
+      sourceType: 'we_work_remotely',
+      externalIdentifier: 'weworkremotely-all',
+      companyId: null,
+    });
+    expect(source.companyId).toBeNull();
+    expect(tables.job_sources?.[0]?.company_id).toBeNull();
+    const loaded = await store.getJobSource(source.id);
+    expect(loaded?.companyId).toBeNull();
+    const byIdent = await store.findJobSourceByExternalIdentifier(
+      'we_work_remotely',
+      'weworkremotely-all',
+    );
+    expect(byIdent?.id).toBe(source.id);
+    expect(byIdent?.companyId).toBeNull();
+  });
+
   it('does not require a secret key when the store is injected with a test client', async () => {
     expect(process.env.SUPABASE_SECRET_KEY).toBeFalsy();
     const { client } = createFakeSupabase();
@@ -325,5 +374,32 @@ describe('fingerprint remains non-unique at the store boundary', () => {
     });
     const found = await store.findCanonicalCandidates('same-fingerprint');
     expect(found).toHaveLength(2);
+  });
+
+  it('pages source postings past the PostgREST 1000-row cap', async () => {
+    const sourceId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const now = new Date().toISOString();
+    const postings: Row[] = Array.from({ length: 1101 }, (_, i) => ({
+      id: `00000000-0000-4000-8000-${i.toString(16).padStart(12, '0')}`,
+      job_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      source_id: sourceId,
+      external_id: `ext-${i}`,
+      source_url: null,
+      apply_url: null,
+      raw_payload: null,
+      published_at: null,
+      first_seen_at: now,
+      last_seen_at: now,
+      active: true,
+      content_hash: 'h',
+      consecutive_misses: 0,
+      created_at: now,
+      updated_at: now,
+    }));
+    const { client } = createFakeSupabase({ job_source_postings: postings });
+    const store = new SupabaseJobStore(client);
+    const found = await store.findPostingsBySource(sourceId);
+    expect(found).toHaveLength(1101);
+    expect(new Set(found.map((row) => row.externalId)).size).toBe(1101);
   });
 });

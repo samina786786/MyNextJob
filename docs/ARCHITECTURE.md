@@ -107,10 +107,18 @@ evidence → `source_sync_runs` metrics.
 source identity. See [`JOB_ENGINE.md`](./JOB_ENGINE.md).
 
 Phase 3 ships a synthetic adapter, `MemoryJobStore` for tests, and
-`SupabaseJobStore` for production persistence. Phase 4A adds the
-Greenhouse public Job Board adapter; Phase 4B adds Lever. See
-[`JOB_SOURCE_GREENHOUSE.md`](./JOB_SOURCE_GREENHOUSE.md) and
-[`JOB_SOURCE_LEVER.md`](./JOB_SOURCE_LEVER.md).
+`SupabaseJobStore` for production persistence. Phase 4A–4C add
+Greenhouse, Lever, and Ashby. Phase 4D adds We Work Remotely RSS as
+the first aggregator source. See
+[`JOB_SOURCE_GREENHOUSE.md`](./JOB_SOURCE_GREENHOUSE.md),
+[`JOB_SOURCE_LEVER.md`](./JOB_SOURCE_LEVER.md),
+[`JOB_SOURCE_ASHBY.md`](./JOB_SOURCE_ASHBY.md), and
+[`JOB_SOURCE_WE_WORK_REMOTELY.md`](./JOB_SOURCE_WE_WORK_REMOTELY.md).
+
+Phase 5A adds the 30-day active catalog, `staleSkipped` admission, a
+keyset feed read model, and a content-hash sync fast path. See
+[`JOB_FEED_FOUNDATION.md`](./JOB_FEED_FOUNDATION.md). The visual feed is
+Phase 5B.
 
 ## Normalized job model
 
@@ -149,7 +157,7 @@ column exists so the UI can explain matches without recomputing them.
 - No global state store (React Query/RSC + URL state is enough for now).
 - No microservices, message brokers, Docker, Kubernetes, Redis, or
   Elasticsearch. Next.js + Supabase carries the workload comfortably.
-- No LLM/embedding calls in Phase 0–4B. Resume parsing is local.
+- No LLM/embedding calls in Phase 0–4D. Resume parsing is local.
 - No LinkedIn / Naukri / Workday scraping as a core dependency.
-- Greenhouse and Lever discovery are public GET only (no API keys).
-  Ashby and later ATS adapters are not implemented yet.
+- Greenhouse, Lever, Ashby, and WWR discovery are public GET / RSS only
+  (no API keys). WWR listing HTML is never scraped.

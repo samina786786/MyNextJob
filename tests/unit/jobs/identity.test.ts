@@ -59,6 +59,16 @@ describe('content hash', () => {
     const b = jobContentHash(prepared('Engineer', { publishedAt: '2026-08-01T00:00:00.000Z' }));
     expect(a).toBe(b);
   });
+
+  it('changes when applyUrl or sourceUrl changes', () => {
+    const base = jobContentHash(prepared('Engineer'));
+    expect(
+      jobContentHash(prepared('Engineer', { applyUrl: 'https://jobs.example.test/apply-new' })),
+    ).not.toBe(base);
+    expect(
+      jobContentHash(prepared('Engineer', { sourceUrl: 'https://jobs.example.test/source-new' })),
+    ).not.toBe(base);
+  });
 });
 
 describe('strong duplicate rule', () => {

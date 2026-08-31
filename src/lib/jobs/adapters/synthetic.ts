@@ -37,7 +37,7 @@ export function syntheticJob(
     salary: partial.salary,
     department: partial.department,
     team: partial.team,
-    publishedAt: partial.publishedAt ?? '2026-08-01T00:00:00.000Z',
+    publishedAt: partial.publishedAt ?? '2026-08-28T00:00:00.000Z',
     rawPayload: partial.rawPayload ?? { id: partial.externalId, title: partial.title },
   };
 }

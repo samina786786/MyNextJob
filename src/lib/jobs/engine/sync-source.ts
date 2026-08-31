@@ -1,10 +1,11 @@
 import type { JobSourceAdapter } from '@/lib/jobs/adapters/types';
-import { AdapterFetchError, PersistenceError, ValidationError, sanitizeErrorMessage } from '@/lib/jobs/errors';
+import { AdapterFetchError, PersistenceError, StaleAdmissionError, ValidationError, sanitizeErrorMessage } from '@/lib/jobs/errors';
 import { nextSyncAt, nextSyncDelayMinutes } from '@/lib/jobs/engine/backoff';
+import { CompanyResolutionCache } from '@/lib/jobs/engine/company-cache';
 import { applyMissingLifecycle } from '@/lib/jobs/engine/lifecycle';
 import { persistNormalizedJob } from '@/lib/jobs/engine/persist-job';
 import { logJobEngine } from '@/lib/jobs/logging';
-import type { JobEngineStore } from '@/lib/jobs/repository/types';
+import type { JobEngineStore, SourcePostingRecord } from '@/lib/jobs/repository/types';
 import { JOB_ENGINE_BATCH_SIZE } from '@/lib/jobs/types';
 import type { RejectionReason } from '@/lib/jobs/types';
 
@@ -12,6 +13,7 @@ export type SyncMetrics = {
   fetched: number;
   accepted: number;
   rejected: number;
+  staleSkipped: number;
   canonicalJobsCreated: number;
   canonicalJobsUpdated: number;
   unchanged: number;
@@ -20,6 +22,15 @@ export type SyncMetrics = {
   duplicateCandidates: number;
   failures: number;
   snapshotComplete: boolean;
+  timings?: {
+    fetchMs: number;
+    prefetchMs: number;
+    persistMs: number;
+    lifecycleMs: number;
+    companyLookups: number;
+    postingPrefetch: number;
+    batchedTouches: number;
+  };
 };
 
 export type SyncRejection = {
@@ -40,6 +51,7 @@ function emptyMetrics(snapshotComplete: boolean): SyncMetrics {
     fetched: 0,
     accepted: 0,
     rejected: 0,
+    staleSkipped: 0,
     canonicalJobsCreated: 0,
     canonicalJobsUpdated: 0,
     unchanged: 0,
@@ -74,6 +86,7 @@ export async function syncJobSource(
 
   try {
     const company = source.companyId ? await store.findCompanyById(source.companyId) : null;
+    const fetchStarted = Date.now();
     const fetchResult = await adapter.fetchJobs({
       sourceId,
       sourceName: source.name,
@@ -83,31 +96,85 @@ export async function syncJobSource(
       companyDomain: company?.domain ?? null,
       metadata: source.metadata,
     });
+    const fetchMs = Date.now() - fetchStarted;
+
+    const prefetchStarted = Date.now();
+    const existingPostings = await store.findPostingsBySource(sourceId);
+    const postingByExternalId = new Map(
+      existingPostings.map((posting) => [posting.externalId, posting] as const),
+    );
+    const prefetchMs = Date.now() - prefetchStarted;
+    const companyCache = new CompanyResolutionCache(store);
+    if (company) companyCache.remember(company);
+
+    const pendingPostingIds: string[] = [];
+    const pendingJobIds: string[] = [];
+    const pendingJobIdSet = new Set<string>();
+    let batchedTouches = 0;
+    const flushTouches = async () => {
+      if (pendingPostingIds.length === 0) return;
+      batchedTouches += 1;
+      await store.touchUnchangedSightings({
+        postingIds: pendingPostingIds.splice(0),
+        jobIds: pendingJobIds.splice(0),
+        now: store.now(),
+      });
+      pendingJobIdSet.clear();
+    };
+    const queueUnchangedTouch = (posting: SourcePostingRecord) => {
+      pendingPostingIds.push(posting.id);
+      if (!pendingJobIdSet.has(posting.jobId)) {
+        pendingJobIdSet.add(posting.jobId);
+        pendingJobIds.push(posting.jobId);
+      }
+    };
 
     const metrics = emptyMetrics(fetchResult.snapshotComplete);
     const rejections: SyncRejection[] = [];
     const seenExternalIds = new Set<string>();
     const jobs = fetchResult.jobs;
     metrics.fetched = jobs.length;
+    const persistStarted = Date.now();
 
     for (let offset = 0; offset < jobs.length; offset += JOB_ENGINE_BATCH_SIZE) {
       const chunk = jobs.slice(offset, offset + JOB_ENGINE_BATCH_SIZE);
       for (const raw of chunk) {
         const externalId = raw.source?.externalId;
         try {
-          const outcome = await persistNormalizedJob(store, {
-            ...raw,
-            source: {
-              sourceId,
-              externalId: raw.source?.externalId ?? '',
+          const outcome = await persistNormalizedJob(
+            store,
+            {
+              ...raw,
+              source: {
+                sourceId,
+                externalId: raw.source?.externalId ?? '',
+              },
             },
-          });
+            { postingByExternalId, companyCache, queueUnchangedTouch },
+          );
           seenExternalIds.add(raw.source.externalId);
           metrics.accepted += 1;
           if (outcome.duplicateCandidate) metrics.duplicateCandidates += 1;
           if (outcome.kind === 'created') {
             metrics.canonicalJobsCreated += 1;
             metrics.sourcePostingsCreated += 1;
+            postingByExternalId.set(raw.source.externalId, {
+              id: outcome.postingId,
+              jobId: outcome.jobId,
+              sourceId,
+              externalId: raw.source.externalId,
+              sourceUrl: null,
+              applyUrl: null,
+              rawPayload: null,
+              publishedAt: null,
+              firstSeenAt: store.now(),
+              lastSeenAt: store.now(),
+              active: true,
+              contentHash: outcome.contentHash,
+              consecutiveMisses: 0,
+              createdAt: store.now(),
+              updatedAt: store.now(),
+            });
           } else if (outcome.kind === 'merged') {
             metrics.sourcePostingsCreated += 1;
             metrics.canonicalJobsUpdated += 1;
@@ -119,6 +186,11 @@ export async function syncJobSource(
             metrics.sourcePostingsUpdated += 1;
           }
         } catch (error) {
+          if (error instanceof StaleAdmissionError) {
+            metrics.staleSkipped += 1;
+            if (externalId) seenExternalIds.add(externalId);
+            continue;
+          }
           metrics.rejected += 1;
           const reason =
             error instanceof ValidationError ? error.reason : 'unknown';
@@ -133,8 +205,14 @@ export async function syncJobSource(
           }
         }
       }
+      if (pendingPostingIds.length >= JOB_ENGINE_BATCH_SIZE) {
+        await flushTouches();
+      }
     }
+    await flushTouches();
+    const persistMs = Date.now() - persistStarted;
 
+    const lifecycleStarted = Date.now();
     if (fetchResult.snapshotComplete) {
       await applyMissingLifecycle(store, {
         sourceId,
@@ -143,6 +221,17 @@ export async function syncJobSource(
         policy: store.lifecyclePolicyForSource(source),
       });
     }
+    const lifecycleMs = Date.now() - lifecycleStarted;
+    metrics.timings = {
+      fetchMs,
+      prefetchMs,
+      persistMs,
+      lifecycleMs,
+      companyLookups:
+        companyCache.counts.byId + companyCache.counts.byDomain + companyCache.counts.byNameKey,
+      postingPrefetch: existingPostings.length,
+      batchedTouches,
+    };
 
     await store.finishSyncRun(run.id, {
       status: 'succeeded',
@@ -174,6 +263,7 @@ export async function syncJobSource(
       fetched: metrics.fetched,
       accepted: metrics.accepted,
       rejected: metrics.rejected,
+      staleSkipped: metrics.staleSkipped,
     });
 
     return {

@@ -6,6 +6,7 @@ type JobEngineEvent =
   | 'job_updated'
   | 'duplicate_candidate'
   | 'job_rejected'
+  | 'job_stale_skipped'
   | 'greenhouse_fetch_started'
   | 'greenhouse_fetch_completed'
   | 'greenhouse_source_sync_completed'
@@ -13,7 +14,15 @@ type JobEngineEvent =
   | 'lever_fetch_started'
   | 'lever_fetch_completed'
   | 'lever_source_sync_completed'
-  | 'lever_source_sync_failed';
+  | 'lever_source_sync_failed'
+  | 'ashby_fetch_started'
+  | 'ashby_fetch_completed'
+  | 'ashby_source_sync_completed'
+  | 'ashby_source_sync_failed'
+  | 'wwr_fetch_started'
+  | 'wwr_fetch_completed'
+  | 'wwr_source_sync_completed'
+  | 'wwr_source_sync_failed';
 
 /**
  * Structured engine logs. Never include raw payloads, secrets, or

@@ -19,18 +19,50 @@ default 75, and explicit grants/revokes for the taxonomy. Phase 3 adds
 [`0006_greenhouse_sources.sql`](../supabase/migrations/0006_greenhouse_sources.sql):
 curated Greenhouse companies/sources only — no new tables. Phase 4B adds
 [`0007_lever_sources.sql`](../supabase/migrations/0007_lever_sources.sql):
-curated Lever companies/sources only — no new tables. Review both
-before applying. See [`JOB_ENGINE.md`](./JOB_ENGINE.md),
-[`JOB_SOURCE_GREENHOUSE.md`](./JOB_SOURCE_GREENHOUSE.md), and
-[`JOB_SOURCE_LEVER.md`](./JOB_SOURCE_LEVER.md).
+curated Lever companies/sources only — no new tables. Phase 4C adds
+[`0008_ashby_sources.sql`](../supabase/migrations/0008_ashby_sources.sql):
+curated Ashby companies/sources only — no new tables. Phase 4D adds
+[`0009_we_work_remotely_source.sql`](../supabase/migrations/0009_we_work_remotely_source.sql):
+one WWR all-jobs RSS source with `company_id` NULL — no publisher
+company row and no new tables.
+Phase 5A adds
+[`0010_job_feed_foundation.sql`](../supabase/migrations/0010_job_feed_foundation.sql)
+(live): generated `jobs.freshness_at`, open-feed keyset index,
+column-limited authenticated SELECT on `jobs`, and `service_role` DELETE
+for cleanup.
+[`0011_job_grant_hardening.sql`](../supabase/migrations/0011_job_grant_hardening.sql)
+strips leftover client TRUNCATE/REFERENCES/TRIGGER/MAINTAIN on `jobs`
+and `job_sources` without touching `0010`. Do not apply 0011
+automatically.
+Review each before applying. See [`JOB_ENGINE.md`](./JOB_ENGINE.md) and
+the Phase 4 source docs.
 
 Every user-owned table has RLS enabled with owner-only policies. Shared
 read-mostly tables (companies, jobs, skills, job_skills, job_sources)
 are readable by any authenticated user; writes are reserved for
-server-side `service_role` code. `job_source_postings` and
+server-side `service_role` code. After 0010, authenticated `jobs`
+SELECT is column-limited (no `raw_payload`, fingerprint, hashes, or
+source identity). After 0011, client roles also lose leftover
+TRUNCATE/REFERENCES/TRIGGER/MAINTAIN on `jobs` and `job_sources`.
+`job_source_postings` and
 `source_sync_runs` are server-only (no authenticated GRANT). RLS bypass
 does not replace table GRANTs — 0005 grants `service_role` select/insert/update
-on the engine tables.
+on the engine tables; 0010 adds DELETE on `jobs` and `job_source_postings`.
+
+## Privilege model (jobs catalog)
+
+| Role | `jobs` | `job_sources` | `job_source_postings` / `source_sync_runs` |
+| --- | --- | --- | --- |
+| `anon` | none | none | none |
+| `authenticated` | column-level SELECT only (0010 list) | table SELECT (0003/0005; kept) | none |
+| `service_role` | SELECT/INSERT/UPDATE/DELETE | SELECT/INSERT/UPDATE | postings: SELECT/INSERT/UPDATE/DELETE; sync runs: SELECT/INSERT/UPDATE |
+
+Do not `REVOKE ALL` from `authenticated` on `jobs` — that drops column
+grants. Client roles must not have INSERT/UPDATE/DELETE/TRUNCATE/
+REFERENCES/TRIGGER/MAINTAIN on these tables. RLS policies are separate
+and were not changed in 0011. `companies` still has the same leftover
+TRUNCATE/REFERENCES/TRIGGER/MAINTAIN on client roles; that is outside
+this migration.
 
 ## The tables in plain language
 
@@ -70,9 +102,12 @@ non-null). Ingestion workers upsert into this table.
 Where jobs come from. Each row represents a scrape/API target for a
 company: `source_type` (Greenhouse, Lever, Ashby, WWR, RSS, …),
 `external_identifier`, sync cadence, next-sync time, and current status.
-`external_identifier` holds the Greenhouse board token (and later
-provider ids). A unique index on `(source_type, lower(trim(external_identifier)))`
-is added in `0006`. No cron is installed in Phase 4A.
+`external_identifier` holds the Greenhouse board token, Lever site,
+or Ashby board name. Uniqueness is **provider-specific** — Greenhouse
+and Lever use lowercased identifiers (`0006` / `0007`); Ashby uses
+exact identity after trim (`0008`) because case-insensitivity was not
+proven. No generic all-provider identifier index. No cron is installed
+in Phase 4C.
 
 ### `jobs`
 

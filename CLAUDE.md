@@ -97,11 +97,12 @@ Before every future task:
 ## Scope control
 
 - Do **not** implement work from later phases unless explicitly instructed.
-- Phase 3 (Job Engine) is implemented. Phase 4A is Greenhouse. Phase 4B
-  is Lever. Do not add Ashby, WWR, matching, notifications, applications,
-  job-feed UI, cron, or AI unless a later phase asks for it.
+- Phase 5A (feed foundation) is implemented. Do not add matching,
+  notifications, application UX, job-feed UI, cron, or AI unless a
+  later phase asks for it.
 - Phases: 0 Foundation · 1 Auth · 2 Profile+Resume · 3 Job Engine ·
-  4 Sources · 5 Discovery UI · 6 Matching · 7 Applications ·
+  4 Sources · 5 Discovery UI (5A feed foundation · 5B UI · 5C logos ·
+  5D search · 5E source registry) · 6 Matching · 7 Applications ·
   8 Notifications · 9 PWA/Offline · 10 Production QA.
 
 ## Resume parsing (Phase 2 invariants)
@@ -178,6 +179,86 @@ Before every future task:
   through the generic Phase 3 sanitizer. Fetch the full site snapshot.
 - No Lever-specific database schema.
 - See [`docs/JOB_SOURCE_LEVER.md`](docs/JOB_SOURCE_LEVER.md).
+
+## Ashby discovery (Phase 4C invariants)
+
+- Ashby discovery uses the **public Job Posting API** only.
+  Hostname is fixed: `https://api.ashbyhq.com`.
+- **No Ashby credential** for public discovery. Do not send
+  Authorization, Basic Auth, cookies, or Supabase secrets to Ashby.
+  Do not create `ASHBY_API_KEY`. Authenticated Ashby APIs
+  (`jobPosting.list`, `application.create`, …) are not used.
+- Board name comes from `job_sources.external_identifier`. Never
+  hard-code board names inside adapter logic.
+- Only publicly listed postings are ingested (`isListed !== false`).
+  Unlisted rows are skipped, not rejected.
+- Explicit posting `id` is the preferred source identity. A validated
+  `jobs.ashbyhq.com/{board}/{uuid}` path may be used only as fallback.
+  Never invent identity from title / company / location.
+- `workplaceType` beats `isRemote` and location-text inference.
+- `publishedAt` is the authoritative publication timestamp. Do not
+  replace it with `discovered_at`.
+- Structured `employmentType` is authoritative. Unknown values stay
+  unknown → NULL.
+- Compensation must not mix salary with equity or bonus. Ambiguous
+  multiple salary tiers stay canonical NULL.
+- External descriptions always use the generic Phase 3 sanitizer.
+  Do not add an Ashby-specific sanitizer.
+- Ingest the **full listed board** snapshot in one request. Do not
+  filter by candidate skills, location preference, or resume. Do not
+  invent pagination.
+- No Ashby-specific database tables.
+- See [`docs/JOB_SOURCE_ASHBY.md`](docs/JOB_SOURCE_ASHBY.md).
+
+## We Work Remotely discovery (Phase 4D invariants)
+
+- WWR ingestion uses the official public RSS feed only:
+  `https://weworkremotely.com/remote-jobs.rss`.
+- Never scrape WWR listing pages for discovery. No Playwright,
+  Puppeteer, or HTML crawlers.
+- Preserve WWR attribution. `sourceUrl` (and Phase 4D `applyUrl`) stay
+  on the canonical WWR job URL.
+- WWR is a publisher, not the canonical employer. Do not insert a
+  We Work Remotely row into `companies`. `job_sources.company_id` is
+  NULL. Each RSS item supplies the real employer; canonical jobs
+  resolve through generic company resolution. Fixed ATS sources still
+  use their configured company.
+- Company matching is conservative and never fuzzy. No invented domains.
+- GUID is the preferred source identity. A validated WWR listing URL is
+  the only fallback.
+- `remoteType = remote` does not mean worldwide. Preserve region/country
+  restrictions.
+- `pubDate` is the publication timestamp. Do not replace it with
+  `discovered_at`.
+- Descriptions use the generic Phase 3 sanitizer.
+- Ingest the complete global feed. Do not filter by candidate skills.
+  Do not simultaneously ingest category feeds.
+- `snapshotComplete` requires evidence that the feed is a full active
+  snapshot. Live RSS is incomplete, so WWR snapshots stay incomplete.
+- No WWR-specific job tables.
+- See [`docs/JOB_SOURCE_WE_WORK_REMOTELY.md`](docs/JOB_SOURCE_WE_WORK_REMOTELY.md).
+
+## Feed foundation (Phase 5A invariants)
+
+- MyNextJob is not a historical job archive.
+- Default active catalog window is **30 days**.
+- Trusted `published_at` controls freshness when available.
+- `discovered_at` is the fallback when publication time is unavailable.
+- Do not invent `published_at` for Greenhouse/Lever.
+- Stale source items are not malformed; they are `staleSkipped`.
+- The stale gate runs before dynamic company creation and persistence.
+- Feed queries always enforce freshness; cleanup is not a prerequisite.
+- Stale user-referenced jobs (`saved_jobs`, `applications`, `job_matches`,
+  `notifications`) are preserved.
+- Keyset/cursor pagination only. No large OFFSET feeds.
+- Default feed page size 15, maximum 30.
+- One canonical job appears once regardless of source posting count.
+- No `raw_payload`, fingerprint, or content hash in the user-facing read
+  model.
+- Ingestion performance optimizations must stay provider-neutral.
+- Content-hash unchanged fast path is preferred.
+- No cron yet.
+- See [`docs/JOB_FEED_FOUNDATION.md`](docs/JOB_FEED_FOUNDATION.md).
 
 ## When in doubt
 

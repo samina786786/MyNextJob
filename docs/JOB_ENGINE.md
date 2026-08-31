@@ -7,8 +7,11 @@ persists.
 Phase 4A adds the Greenhouse Job Board adapter
 ([`JOB_SOURCE_GREENHOUSE.md`](./JOB_SOURCE_GREENHOUSE.md)). Phase 4B
 adds Lever Postings API v0
-([`JOB_SOURCE_LEVER.md`](./JOB_SOURCE_LEVER.md)). Ashby and We Work
-Remotely are still later.
+([`JOB_SOURCE_LEVER.md`](./JOB_SOURCE_LEVER.md)). Phase 4C adds the
+Ashby Public Job Posting API
+([`JOB_SOURCE_ASHBY.md`](./JOB_SOURCE_ASHBY.md)). Phase 4D adds We Work
+Remotely official RSS
+([`JOB_SOURCE_WE_WORK_REMOTELY.md`](./JOB_SOURCE_WE_WORK_REMOTELY.md)).
 
 Jobs are treated as durable structured data: **identity, provenance,
 freshness, lifecycle, and trust** — not disposable scraped cards.
@@ -68,7 +71,10 @@ Phase 3 ships `SyntheticAdapter` (`src/lib/jobs/adapters/synthetic.ts`)
 for tests and `pnpm jobs:synthetic`. Phase 4A ships
 `GreenhouseAdapter` (`src/lib/jobs/adapters/greenhouse.ts`) and
 `pnpm jobs:greenhouse`. Phase 4B ships `LeverAdapter`
-(`src/lib/jobs/adapters/lever.ts`) and `pnpm jobs:lever`.
+(`src/lib/jobs/adapters/lever.ts`) and `pnpm jobs:lever`. Phase 4C
+ships `AshbyAdapter` (`src/lib/jobs/adapters/ashby.ts`) and
+`pnpm jobs:ashby`. Phase 4D ships `WwrAdapter`
+(`src/lib/jobs/adapters/we-work-remotely.ts`) and `pnpm jobs:wwr`.
 
 ## Normalized job contract
 
@@ -107,7 +113,7 @@ it. A later phase can add a safe attribution view.
 | `(source_id, external_id)` | Unique. Primary idempotency key. |
 | `job_id` | Canonical job |
 | `first_seen_at` / `last_seen_at` | Freshness for this source |
-| `content_hash` | Skip no-op updates |
+| `content_hash` | Skip no-op updates. Includes apply/source URLs. |
 | `consecutive_misses` | Complete-snapshot misses for this source |
 | `raw_payload` | Debug/reconstruct mapping only |
 
@@ -119,10 +125,14 @@ is strong enough.
 
 Priority:
 
-1. Explicit `company_id`
+1. Explicit `company_id` (fixed-company ATS sources)
 2. Canonical normalized domain (`https://www.example.com/` → `example.com`)
-3. Normalized company name (Unicode fold, trim, collapse whitespace, case-fold)
-4. Create a company when the engine is allowed to (Phase 3 tests always may)
+3. Exactly one `name_key` match (Unicode fold, trim, collapse whitespace, case-fold)
+4. Create a company when none exists. Ambiguous name_key hits are rejected.
+   Slug collisions use a deterministic hash suffix, never a random value.
+
+Aggregator sources (WWR) omit `company_id` and supply a per-job employer
+name. Fixed ATS adapters still pass the configured source company.
 
 Legal suffixes (`Ltd`, `Inc`, `Pty Ltd`) are **not** stripped. Display
 name stays separate from the comparison key.
@@ -242,9 +252,18 @@ required for unit tests. Never put either in `NEXT_PUBLIC_*`.
 
 `0005` grants `service_role` select/insert/update on `companies`,
 `job_sources`, `jobs`, `job_source_postings`, and `source_sync_runs`.
-RLS bypass does not replace those GRANTs.
+`0010` adds `service_role` DELETE on `jobs` and `job_source_postings`
+for retention cleanup. `0011` only revokes leftover client privileges;
+it does not change `service_role`. RLS bypass does not replace those
+GRANTs.
 
 Do not expose a public ingest endpoint.
+
+Phase 5 performance (not a 4D redesign): live WWR unchanged sync was
+~122s for 90 jobs due to sequential per-job/per-company round trips.
+After 5A it is **4.4s** on the same environment (2.3s fetch + 1.05s
+persist, 10 staleSkipped, 80 batched unchanged touches). Keep current
+correctness and idempotency.
 
 Exercise the engine locally:
 
@@ -252,10 +271,12 @@ Exercise the engine locally:
 pnpm jobs:synthetic
 pnpm jobs:greenhouse --source=dscout --dry-run
 pnpm jobs:lever --source=drivetrain --dry-run
+pnpm jobs:ashby --source=junipersquare --dry-run
+pnpm jobs:wwr --dry-run
 ```
 
 ## What Phase 3 does not do
 
-- Ashby / WWR / Workday / LinkedIn / Naukri adapters
+- Workday / LinkedIn / Naukri adapters
 - Cron, queues, job feed UI, matching, applications, AI
 - Showing ingested jobs to signed-in users on `/home`

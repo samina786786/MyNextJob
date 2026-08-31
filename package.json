@@ -21,6 +21,9 @@
     "jobs:synthetic": "vitest run tests/unit/jobs",
     "jobs:greenhouse": "node scripts/with-system-ca.mjs node scripts/jobs-greenhouse.mjs",
     "jobs:lever": "node scripts/with-system-ca.mjs node scripts/jobs-lever.mjs",
+    "jobs:ashby": "node scripts/with-system-ca.mjs node scripts/jobs-ashby.mjs",
+    "jobs:wwr": "node scripts/with-system-ca.mjs node scripts/jobs-wwr.mjs",
+    "jobs:cleanup": "node scripts/with-system-ca.mjs node scripts/jobs-cleanup.mjs",
     "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
@@ -28,6 +31,7 @@
     "@supabase/supabase-js": "^2.45.4",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "fast-xml-parser": "^5.11.1",
     "geist": "^1.7.2",
     "lucide-react": "^0.454.0",
     "mammoth": "^1.12.2",

@@ -155,7 +155,13 @@ export async function fetchLeverJson(
     }
 
     if (response.ok) {
-      return { status: response.status, body: await readJson(response) };
+      try {
+        return { status: response.status, body: await readJson(response) };
+      } catch (error) {
+        if (attempt === maxAttempts) throw error;
+        await sleep(Math.min(500 * 2 ** (attempt - 1), LEVER_RETRY_AFTER_CAP_MS));
+        continue;
+      }
     }
 
     if (NO_RETRY_STATUS.has(response.status) || !TRANSIENT_STATUS.has(response.status)) {

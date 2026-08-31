@@ -1,10 +1,18 @@
 import { isStrongDuplicate } from '@/lib/jobs/engine/deduplicate';
 import { jobContentHash, jobFingerprint } from '@/lib/jobs/engine/fingerprint';
 import { jobReappearancePatch, reappearancePatch } from '@/lib/jobs/engine/lifecycle';
+import type { CompanyResolutionCache } from '@/lib/jobs/engine/company-cache';
 import { resolveCompany } from '@/lib/jobs/engine/resolve-company';
 import { logJobEngine } from '@/lib/jobs/logging';
 import { prepareNormalizedJob } from '@/lib/jobs/normalization/normalize-job';
 import type { PreparedJob } from '@/lib/jobs/normalization/normalize-job';
+import {
+  admitIncomingJob,
+  peekIncomingExternalId,
+  peekIncomingPublishedAt,
+  trustedPublishedAt,
+} from '@/lib/jobs/freshness';
+import { StaleAdmissionError } from '@/lib/jobs/errors';
 import type {
   CanonicalJobRecord,
   JobEngineStore,
@@ -69,24 +77,60 @@ function canonicalFields(job: PreparedJob, company: { id: string; nameKey: strin
   };
 }
 
+export type PersistSession = {
+  postingByExternalId?: Map<string, SourcePostingRecord>;
+  companyCache?: CompanyResolutionCache;
+  queueUnchangedTouch?: (posting: SourcePostingRecord) => void;
+};
+
 /**
- * Validate → resolve company → fingerprint → content hash →
- * source identity upsert → conservative canonical merge.
+ * Freshness gate → validate/sanitize → content-hash fast path →
+ * resolve company → fingerprint → source identity upsert.
  *
  * Same (source_id, external_id) never creates a second posting.
+ * Stale published jobs throw StaleAdmissionError before sanitization
+ * or company creation. Untrusted future publishedAt is stored as null.
  */
 export async function persistNormalizedJob(
   store: JobEngineStore,
   input: unknown,
+  session?: PersistSession,
 ): Promise<PersistOutcome> {
+  const now = store.now();
+  const admission = admitIncomingJob(peekIncomingPublishedAt(input), now);
+  if (!admission.admit) {
+    throw new StaleAdmissionError(peekIncomingExternalId(input));
+  }
   const prepared = prepareNormalizedJob(input);
-  const company = await resolveCompany(store, prepared);
+  prepared.publishedAt = trustedPublishedAt(prepared.publishedAt, now);
+
+  const contentHash = jobContentHash(prepared);
+  const existingPosting = session?.postingByExternalId
+    ? (session.postingByExternalId.get(prepared.externalId) ?? null)
+    : await store.findSourcePosting(prepared.sourceId, prepared.externalId);
+
+  if (existingPosting && existingPosting.contentHash === contentHash) {
+    if (session?.queueUnchangedTouch) {
+      session.queueUnchangedTouch(existingPosting);
+    } else {
+      await touchUnchangedOne(store, existingPosting, prepared, contentHash, now);
+    }
+    return {
+      kind: 'unchanged',
+      jobId: existingPosting.jobId,
+      postingId: existingPosting.id,
+      fingerprint: existingPosting.contentHash ? '' : jobFingerprint(prepared),
+      contentHash,
+      duplicateCandidate: false,
+    };
+  }
+
+  const company = session?.companyCache
+    ? await session.companyCache.resolve(prepared)
+    : await resolveCompany(store, prepared);
   prepared.companyId = company.id;
   const fingerprint = jobFingerprint(prepared);
-  const contentHash = jobContentHash(prepared);
-  const now = store.now();
 
-  const existingPosting = await store.findSourcePosting(prepared.sourceId, prepared.externalId);
   if (existingPosting) {
     return refreshExistingPosting(store, {
       prepared,
@@ -135,6 +179,27 @@ export async function persistNormalizedJob(
     now,
     duplicateCandidate,
   });
+}
+
+async function touchUnchangedOne(
+  store: JobEngineStore,
+  posting: SourcePostingRecord,
+  prepared: PreparedJob,
+  contentHash: string,
+  now: Date,
+): Promise<void> {
+  await store.updateSourcePosting(posting.id, {
+    ...reappearancePatch(now),
+    sourceUrl: prepared.sourceUrl,
+    applyUrl: prepared.applyUrl,
+    publishedAt: prepared.publishedAt,
+    contentHash,
+    rawPayload: posting.rawPayload,
+  });
+  const job = await store.findCanonicalJob(posting.jobId);
+  if (job) {
+    await store.updateCanonicalJob(job.id, jobReappearancePatch(job, now));
+  }
 }
 
 async function refreshExistingPosting(

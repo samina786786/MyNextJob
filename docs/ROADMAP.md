@@ -62,15 +62,45 @@ Email + password only (no OAuth / magic-link-only / phone):
   [`JOB_SOURCE_GREENHOUSE.md`](./JOB_SOURCE_GREENHOUSE.md).
 - **4B Lever** — public Postings API v0 adapter, curated seed (`0007`),
   `pnpm jobs:lever`. See [`JOB_SOURCE_LEVER.md`](./JOB_SOURCE_LEVER.md).
-- 4C+ Ashby, We Work Remotely (not started).
-- Scheduler / cron for `next_sync_at` (not in 4A/4B).
+- **4C Ashby** — public Job Posting API adapter, curated seed (`0008`),
+  `pnpm jobs:ashby`. See [`JOB_SOURCE_ASHBY.md`](./JOB_SOURCE_ASHBY.md).
+- **4D We Work Remotely** — official all-jobs RSS adapter, curated seed
+  (`0009`), `pnpm jobs:wwr`. See
+  [`JOB_SOURCE_WE_WORK_REMOTELY.md`](./JOB_SOURCE_WE_WORK_REMOTELY.md).
+- Scheduler / cron for `next_sync_at` (not in 4A–4D).
 - Live persistence uses Phase 3 `SupabaseJobStore` + `SUPABASE_SECRET_KEY`.
 
 ## Phase 5 — Discovery UI
 
+### 5A — Feed data foundation *(0010 live; 0011 unapplied)*
+
+- 30-day active catalog, `staleSkipped` admission, cleanup CLI.
+- Cursor/keyset feed repository (page 15 / max 30).
+- Column-limited `jobs` SELECT and `jobs.freshness_at` + feed index
+  in [`0010_job_feed_foundation.sql`](../supabase/migrations/0010_job_feed_foundation.sql).
+- Client grant hardening in
+  [`0011_job_grant_hardening.sql`](../supabase/migrations/0011_job_grant_hardening.sql).
+- Provider-neutral content-hash sync fast path.
+- See [`JOB_FEED_FOUNDATION.md`](./JOB_FEED_FOUNDATION.md).
+
+### 5B — Feed UI & infinite scroll
+
 - Real home feed with filters, freshness, and skeletons.
 - Job detail page with clean reading typography (calmer clay).
 - Saved jobs.
+- Next.js `use cache` / `cacheLife` / `cacheTag` for the shared catalog.
+
+### 5C — Company logos / assets
+
+- Not started. No logo columns in 0010.
+
+### 5D — Search, filters, attribution, feed QA
+
+- Not started. Feed repository filters are reserved, not implemented.
+
+### 5E — Source registry expansion
+
+- Not started. No cron. Manual sync remains.
 
 ## Phase 6 — Matching engine
 

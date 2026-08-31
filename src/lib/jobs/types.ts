@@ -50,6 +50,8 @@ export type NormalizedJobCompany = {
   companyId?: string;
   name: string;
   domain?: string | null;
+  /** Optional employer logo URL. Not persisted in Phase 4D. */
+  logoUrl?: string | null;
 };
 
 export type NormalizedJobSourceRef = {
@@ -95,6 +97,9 @@ export type RejectionReason =
   | 'payload_too_large';
 
 export const JOB_ENGINE_BATCH_SIZE = 100;
+
+/** PostgREST default max-rows. Ingestion list fetches must page at this size. */
+export const JOB_STORE_LIST_PAGE_SIZE = 1000;
 
 export const RAW_PAYLOAD_MAX_BYTES = 32 * 1024;
 

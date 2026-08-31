@@ -1,4 +1,5 @@
 import { PersistenceError } from '@/lib/jobs/errors';
+import { companySlugWithCollisionSuffix } from '@/lib/jobs/normalization/normalize-company';
 import { DEFAULT_LIFECYCLE_POLICY, DEFAULT_SYNC_INTERVAL_MINUTES } from '@/lib/jobs/types';
 import type {
   CanonicalJobRecord,
@@ -52,10 +53,14 @@ export class MemoryJobStore implements JobEngineStore {
   }
 
   async findCompanyByNameKey(nameKey: string): Promise<CompanyRecord | null> {
-    for (const company of this.companies.values()) {
-      if (company.nameKey === nameKey) return clone(company);
-    }
-    return null;
+    const matches = await this.findCompaniesByNameKey(nameKey);
+    return matches.length === 1 ? matches[0] ?? null : null;
+  }
+
+  async findCompaniesByNameKey(nameKey: string): Promise<CompanyRecord[]> {
+    return [...this.companies.values()]
+      .filter((company) => company.nameKey === nameKey)
+      .map(clone);
   }
 
   async insertCompany(input: InsertCompanyInput): Promise<CompanyRecord> {
@@ -70,7 +75,10 @@ export class MemoryJobStore implements JobEngineStore {
     let slug = input.slug;
     const taken = new Set([...this.companies.values()].map((c) => c.slug.toLowerCase()));
     if (taken.has(slug.toLowerCase())) {
-      slug = `${slug}-${crypto.randomUUID().slice(0, 6)}`;
+      slug = companySlugWithCollisionSuffix(input.name, input.nameKey);
+      if (taken.has(slug.toLowerCase())) {
+        throw new PersistenceError('Duplicate company slug', '23505');
+      }
     }
     const now = this.now();
     const record: CompanyRecord = {
@@ -239,6 +247,46 @@ export class MemoryJobStore implements JobEngineStore {
     const next = { ...current, ...patch, id, updatedAt: this.now() };
     this.jobs.set(id, next);
     return clone(next);
+  }
+
+  async deleteCanonicalJob(id: string): Promise<void> {
+    for (const posting of [...this.postings.values()]) {
+      if (posting.jobId !== id) continue;
+      this.postings.delete(posting.id);
+      this.postingKey.delete(`${posting.sourceId}::${posting.externalId}`);
+    }
+    this.jobs.delete(id);
+  }
+
+  async touchUnchangedSightings(input: {
+    postingIds: string[];
+    jobIds: string[];
+    now: Date;
+  }): Promise<void> {
+    for (const id of input.postingIds) {
+      const current = this.postings.get(id);
+      if (!current) continue;
+      this.postings.set(id, {
+        ...current,
+        lastSeenAt: input.now,
+        consecutiveMisses: 0,
+        active: true,
+        updatedAt: input.now,
+      });
+    }
+    for (const id of input.jobIds) {
+      const current = this.jobs.get(id);
+      if (!current) continue;
+      this.jobs.set(id, {
+        ...current,
+        lastSeenAt: input.now,
+        consecutiveMisses: 0,
+        status: 'open',
+        closedAt: null,
+        statusChangedAt: current.status === 'open' ? current.statusChangedAt : input.now,
+        updatedAt: input.now,
+      });
+    }
   }
 
   async startSyncRun(sourceId: string): Promise<SyncRunRecord> {

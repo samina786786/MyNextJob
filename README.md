@@ -6,11 +6,13 @@ MyNextJob is a mobile-first, installable job-search PWA. It discovers fresh
 jobs from company ATS/career systems and public feeds, matches them against
 your resume, and notifies you the moment your next opportunity appears.
 
-**Current phase: Phase 4B — Lever Postings API source.**
-The Phase 3 Job Engine is live. Greenhouse and Lever public boards
+**Current phase: Phase 4D — We Work Remotely public RSS source.**
+The Phase 3 Job Engine is live. Greenhouse, Lever, Ashby, and WWR
 ingest through the same adapter contract. See
-[`docs/JOB_SOURCE_GREENHOUSE.md`](docs/JOB_SOURCE_GREENHOUSE.md) and
-[`docs/JOB_SOURCE_LEVER.md`](docs/JOB_SOURCE_LEVER.md).
+[`docs/JOB_SOURCE_GREENHOUSE.md`](docs/JOB_SOURCE_GREENHOUSE.md),
+[`docs/JOB_SOURCE_LEVER.md`](docs/JOB_SOURCE_LEVER.md),
+[`docs/JOB_SOURCE_ASHBY.md`](docs/JOB_SOURCE_ASHBY.md), and
+[`docs/JOB_SOURCE_WE_WORK_REMOTELY.md`](docs/JOB_SOURCE_WE_WORK_REMOTELY.md).
 `/home` remains the Phase 2 profile-ready experience — ingested jobs
 are not shown to users yet.
 
@@ -65,6 +67,8 @@ pnpm test:e2e         # Playwright smoke suite
 pnpm jobs:synthetic   # In-memory Job Engine exercise (no live DB)
 pnpm jobs:greenhouse --source=dscout --dry-run  # Greenhouse fetch, no writes
 pnpm jobs:lever --source=drivetrain --dry-run   # Lever fetch, no writes
+pnpm jobs:ashby --source=junipersquare --dry-run  # Ashby fetch, no writes
+pnpm jobs:wwr --dry-run                         # WWR RSS fetch, no writes
 ```
 
 Playwright browsers must be installed once:
@@ -127,7 +131,7 @@ src/
 │   └── validation/          # Zod schemas used at trust boundaries
 └── proxy.ts                 # Next.js 16 session-refresh entry
 supabase/
-└── migrations/              # 0001–0005 (schema, auth trigger, grants, skills, job engine)
+└── migrations/              # 0001–0009 (schema through WWR RSS source)
 scripts/
 └── generate-icons.mjs       # PWA icon generator (sharp)
 tests/
@@ -154,17 +158,19 @@ together and [`docs/DATABASE.md`](docs/DATABASE.md) for the schema.
    ```
 
    Or paste each file in `supabase/migrations/` into the SQL Editor, in
-   order (`0001` … `0007`). Phase 2 needs `0004` for the skill catalog
+   order (`0001` … `0009`). Phase 2 needs `0004` for the skill catalog
    and the `freelance` employment type. Phase 3 needs `0005` for
    `job_source_postings` and job lifecycle columns. Phase 4A needs
    `0006` for curated Greenhouse companies/sources. Phase 4B needs
-   `0007` for curated Lever companies/sources — review both before
-   applying. Do not skip grants in `0003` / `0004` / `0005` — Data API
+   `0007` for curated Lever companies/sources. Phase 4C needs `0008`
+   for curated Ashby companies/sources. Phase 4D needs `0009` for the
+   WWR all-jobs RSS source — review each before applying.
+   Do not skip grants in `0003` / `0004` / `0005` — Data API
    auto-expose is off.
 
 ## Contributing to Phase 0
 
 - Server Components by default; `"use client"` only when justified.
 - All new UI must use semantic tokens, not raw hex.
-- Do not implement Lever/Ashby/WWR, job UI, matching, or cron here.
+- Do not implement job UI, matching, or cron here.
   See [`CLAUDE.md`](CLAUDE.md).

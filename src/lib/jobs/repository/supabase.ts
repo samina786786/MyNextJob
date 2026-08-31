@@ -3,7 +3,10 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { PersistenceError } from '@/lib/jobs/errors';
-import { normalizeCompanyName } from '@/lib/jobs/normalization/normalize-company';
+import {
+  companySlugWithCollisionSuffix,
+  normalizeCompanyName,
+} from '@/lib/jobs/normalization/normalize-company';
 import { normalizeLocation } from '@/lib/jobs/normalization/normalize-location';
 import { normalizeTitle } from '@/lib/jobs/normalization/normalize-title';
 import {
@@ -27,7 +30,11 @@ import type {
   SyncRunRecord,
 } from '@/lib/jobs/repository/types';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { DEFAULT_LIFECYCLE_POLICY, DEFAULT_SYNC_INTERVAL_MINUTES } from '@/lib/jobs/types';
+import {
+  DEFAULT_LIFECYCLE_POLICY,
+  DEFAULT_SYNC_INTERVAL_MINUTES,
+  JOB_STORE_LIST_PAGE_SIZE,
+} from '@/lib/jobs/types';
 import type { JobSourceProvider, JobStatus, LifecyclePolicy, SourceStatus } from '@/lib/jobs/types';
 
 type Row = Record<string, unknown>;
@@ -35,6 +42,42 @@ type Row = Record<string, unknown>;
 function throwIf(error: { message: string; code?: string } | null): void {
   if (!error) return;
   throw new PersistenceError(error.message, error.code);
+}
+
+/**
+ * Complete list fetch. PostgREST silently caps a single SELECT at
+ * ~1000 rows; range pages until a short page so ingestion never truncates.
+ */
+async function fetchAllEqPages(
+  supabase: SupabaseClient,
+  table: string,
+  column: string,
+  value: string,
+): Promise<Row[]> {
+  const all: Row[] = [];
+  const seen = new Set<string>();
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('*')
+      .eq(column, value)
+      .order('id', { ascending: true })
+      .range(from, from + JOB_STORE_LIST_PAGE_SIZE - 1);
+    throwIf(error);
+    const page = (data as Row[] | null) ?? [];
+    for (const row of page) {
+      const id = String(row.id);
+      if (seen.has(id)) {
+        throw new PersistenceError(`List fetch for ${table} returned duplicate pages`);
+      }
+      seen.add(id);
+      all.push(row);
+    }
+    if (page.length < JOB_STORE_LIST_PAGE_SIZE) break;
+    from += JOB_STORE_LIST_PAGE_SIZE;
+  }
+  return all;
 }
 
 function asIso(value: Date | string | null | undefined): string | null {
@@ -232,13 +275,17 @@ export class SupabaseJobStore implements JobEngineStore {
   }
 
   async findCompanyByNameKey(nameKey: string): Promise<CompanyRecord | null> {
+    const matches = await this.findCompaniesByNameKey(nameKey);
+    return matches.length === 1 ? matches[0] ?? null : null;
+  }
+
+  async findCompaniesByNameKey(nameKey: string): Promise<CompanyRecord[]> {
     const { data, error } = await this.supabase
       .from('companies')
       .select('*')
-      .eq('name_key', nameKey)
-      .maybeSingle();
+      .eq('name_key', nameKey);
     throwIf(error);
-    return data ? mapCompany(data as Row) : null;
+    return ((data as Row[] | null) ?? []).map((row) => mapCompany(row));
   }
 
   async insertCompany(input: InsertCompanyInput): Promise<CompanyRecord> {
@@ -253,6 +300,18 @@ export class SupabaseJobStore implements JobEngineStore {
       const existing = await this.findCompanyByDomain(input.domain);
       if (existing) {
         throw new PersistenceError('Duplicate company domain', PG_UNIQUE_VIOLATION);
+      }
+    }
+    if (isPgUniqueViolation(error)) {
+      const retrySlug = companySlugWithCollisionSuffix(input.name, input.nameKey);
+      if (retrySlug !== input.slug) {
+        const retry = await this.supabase
+          .from('companies')
+          .insert({ ...payload, slug: retrySlug })
+          .select('*')
+          .single();
+        throwIf(retry.error);
+        return mapCompany(retry.data as Row);
       }
     }
     throwIf(error);
@@ -341,12 +400,8 @@ export class SupabaseJobStore implements JobEngineStore {
   }
 
   async findPostingsBySource(sourceId: string): Promise<SourcePostingRecord[]> {
-    const { data, error } = await this.supabase
-      .from('job_source_postings')
-      .select('*')
-      .eq('source_id', sourceId);
-    throwIf(error);
-    return ((data as Row[] | null) ?? []).map(mapPosting);
+    const rows = await fetchAllEqPages(this.supabase, 'job_source_postings', 'source_id', sourceId);
+    return rows.map(mapPosting);
   }
 
   async findPostingsByJob(jobId: string): Promise<SourcePostingRecord[]> {
@@ -444,6 +499,55 @@ export class SupabaseJobStore implements JobEngineStore {
     const company =
       row.company_id == null ? null : await this.findCompanyById(String(row.company_id));
     return mapJob(row, company);
+  }
+
+  async deleteCanonicalJob(id: string): Promise<void> {
+    const { error } = await this.supabase.from('jobs').delete().eq('id', id);
+    throwIf(error);
+  }
+
+  async touchUnchangedSightings(input: {
+    postingIds: string[];
+    jobIds: string[];
+    now: Date;
+  }): Promise<void> {
+    const seen = asIso(input.now);
+    if (input.postingIds.length > 0) {
+      const { error } = await this.supabase
+        .from('job_source_postings')
+        .update({
+          last_seen_at: seen,
+          consecutive_misses: 0,
+          active: true,
+        })
+        .in('id', input.postingIds);
+      throwIf(error);
+    }
+    if (input.jobIds.length > 0) {
+      const { error: openError } = await this.supabase
+        .from('jobs')
+        .update({
+          last_seen_at: seen,
+          consecutive_misses: 0,
+          status: 'open',
+          closed_at: null,
+        })
+        .in('id', input.jobIds)
+        .eq('status', 'open');
+      throwIf(openError);
+      const { error: reopenError } = await this.supabase
+        .from('jobs')
+        .update({
+          last_seen_at: seen,
+          consecutive_misses: 0,
+          status: 'open',
+          closed_at: null,
+          status_changed_at: seen,
+        })
+        .in('id', input.jobIds)
+        .neq('status', 'open');
+      throwIf(reopenError);
+    }
   }
 
   async startSyncRun(sourceId: string): Promise<SyncRunRecord> {

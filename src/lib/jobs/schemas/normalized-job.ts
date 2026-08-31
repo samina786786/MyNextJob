@@ -39,6 +39,7 @@ export const normalizedJobInputSchema = z.object({
     companyId: z.string().uuid().optional(),
     name: z.string().trim().min(1).max(300),
     domain: z.string().trim().max(253).nullable().optional(),
+    logoUrl: z.string().trim().max(2000).nullable().optional(),
   }),
   title: z.string().trim().min(1).max(400),
   location: z

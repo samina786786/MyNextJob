@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { comparisonKey } from '@/lib/jobs/normalization/text';
 
 /**
@@ -15,4 +17,15 @@ export function companySlugBase(name: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 60);
   return slug.length > 0 ? slug : 'company';
+}
+
+/** Deterministic 8-char suffix for slug collisions. Never random. */
+export function companySlugCollisionSuffix(nameKey: string): string {
+  return createHash('sha256').update(nameKey).digest('hex').slice(0, 8);
+}
+
+export function companySlugWithCollisionSuffix(name: string, nameKey: string): string {
+  const base = companySlugBase(name);
+  const suffix = companySlugCollisionSuffix(nameKey);
+  return `${base}-${suffix}`.slice(0, 80);
 }

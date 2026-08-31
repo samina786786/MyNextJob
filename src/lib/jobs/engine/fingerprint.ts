@@ -31,6 +31,8 @@ export function jobFingerprint(job: PreparedJob): string {
  * Content hash of normalized source-relevant fields.
  * Timestamps such as fetched_at / last_seen_at / discovered_at must
  * not appear here — they would force no-op updates.
+ * applyUrl and sourceUrl are included so an application-link change
+ * exits the unchanged fast path.
  */
 export function jobContentHash(job: PreparedJob): string {
   return sha256Hex([
@@ -43,5 +45,7 @@ export function jobContentHash(job: PreparedJob): string {
     job.salaryPeriod ?? '',
     job.remoteType,
     job.employmentType,
+    job.applyUrl ?? '',
+    job.sourceUrl ?? '',
   ]);
 }
