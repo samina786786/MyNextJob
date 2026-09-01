@@ -1,12 +1,20 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { getAttributionLabelsByJobIds } from '@/lib/jobs/feed/supabase-attribution';
+import {
+  COMPANY_FEED_EMBED_NAME_ONLY,
+  COMPANY_FEED_EMBED_WITH_LOGO,
+  isMissingCompanyLogoColumn,
+  readCompanyFeedFields,
+  type CompanyFeedEmbedRow,
+} from '@/lib/jobs/feed/company-fields';
 import { catalogCutoff } from '@/lib/jobs/freshness';
 import { PersistenceError } from '@/lib/jobs/errors';
 import { isSafeHttpUrl } from '@/lib/jobs/normalization/normalize-urls';
+import { formatStoredDescription } from '@/lib/jobs/normalization/sanitize-description';
 import type { EmploymentType, JobStatus, RemoteType, SalaryPeriod } from '@/lib/jobs/types';
 
-const DETAIL_SELECT = [
+const DETAIL_COLUMNS = [
   'id',
   'company_id',
   'title',
@@ -29,8 +37,10 @@ const DETAIL_SELECT = [
   'source_url',
   'description_html',
   'description_text',
-  'companies(name)',
-].join(',');
+] as const;
+
+const DETAIL_SELECT_WITH_LOGO = [...DETAIL_COLUMNS, COMPANY_FEED_EMBED_WITH_LOGO].join(',');
+const DETAIL_SELECT_NAME_ONLY = [...DETAIL_COLUMNS, COMPANY_FEED_EMBED_NAME_ONLY].join(',');
 
 type DetailRow = {
   id: string;
@@ -55,12 +65,13 @@ type DetailRow = {
   source_url: string | null;
   description_html: string | null;
   description_text: string | null;
-  companies: { name: string } | { name: string }[] | null;
+  companies: CompanyFeedEmbedRow | CompanyFeedEmbedRow[] | null;
 };
 
 export type JobDetailDto = {
   id: string;
   companyName: string | null;
+  companyLogoUrl: string | null;
   title: string;
   locationText: string | null;
   city: string | null;
@@ -88,14 +99,10 @@ export function pickApplyUrl(applyUrl: string | null, sourceUrl: string | null):
   return null;
 }
 
-function companyNameFrom(related: DetailRow['companies']): string | null {
-  if (Array.isArray(related)) return related[0]?.name ?? null;
-  return related?.name ?? null;
-}
-
 /**
  * Canonical job for /jobs/[id] when it is still in the active catalog.
  * Returns null for missing, closed, or stale rows.
+ * Logo columns require 0012; older schemas fall back to company name only.
  */
 export async function getFreshJobDetailFromClient(
   client: SupabaseClient,
@@ -103,23 +110,43 @@ export async function getFreshJobDetailFromClient(
   now: Date = new Date(),
 ): Promise<JobDetailDto | null> {
   const cutoff = catalogCutoff(now).toISOString();
-  const { data, error } = await client
+  const first = await client
     .from('jobs')
-    .select(DETAIL_SELECT)
+    .select(DETAIL_SELECT_WITH_LOGO)
     .eq('id', jobId)
     .eq('status', 'open')
     .gte('freshness_at', cutoff)
     .maybeSingle();
+
+  let data = first.data;
+  let error = first.error;
+  if (error && isMissingCompanyLogoColumn(error.message)) {
+    const retry = await client
+      .from('jobs')
+      .select(DETAIL_SELECT_NAME_ONLY)
+      .eq('id', jobId)
+      .eq('status', 'open')
+      .gte('freshness_at', cutoff)
+      .maybeSingle();
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) throw new PersistenceError(error.message);
   if (!data) return null;
 
   const row = data as unknown as DetailRow;
   const labels = await getAttributionLabelsByJobIds(client, [row.id]);
+  const description = formatStoredDescription({
+    html: row.description_html,
+    text: row.description_text,
+  });
+  const company = readCompanyFeedFields(row.companies);
 
   return {
     id: row.id,
-    companyName: companyNameFrom(row.companies),
+    companyName: company.name,
+    companyLogoUrl: company.logoUrl,
     title: row.title,
     locationText: row.location_text,
     city: row.city,
@@ -136,8 +163,8 @@ export async function getFreshJobDetailFromClient(
     discoveredAt: row.discovered_at,
     freshnessAt: row.freshness_at,
     sourceLabel: labels.get(row.id) ?? null,
-    descriptionHtml: row.description_html,
-    descriptionText: row.description_text,
+    descriptionHtml: description.html,
+    descriptionText: description.text,
     applyUrl: pickApplyUrl(row.apply_url, row.source_url),
   };
 }

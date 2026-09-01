@@ -18,7 +18,7 @@ export function AppShell({ children, nav = true, homeHref = '/', compact = false
           compact ? 'max-w-md' : 'max-w-2xl',
         )}
       >
-        <main id="main" role="main" className={cn('flex-1 pt-4', nav ? 'pb-32' : 'pb-10')}>
+        <main id="main" role="main" className={cn('flex-1 pt-4', nav ? 'pb-36' : 'pb-10')}>
           {children}
         </main>
       </div>

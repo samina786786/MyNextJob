@@ -2,7 +2,11 @@ import 'server-only';
 
 import { revalidateTag } from 'next/cache';
 
-import { JOBS_FEED_CACHE_TAG, jobCacheTag } from '@/lib/jobs/feed/cache-tags';
+import {
+  COMPANY_ASSETS_CACHE_TAG,
+  JOBS_FEED_CACHE_TAG,
+  jobCacheTag,
+} from '@/lib/jobs/feed/cache-tags';
 
 /**
  * Next-owned invalidation for the shared catalog cache.
@@ -18,4 +22,8 @@ export function invalidateJobsFeedCache(): void {
 
 export function invalidateJobCache(jobId: string): void {
   revalidateTag(jobCacheTag(jobId), 'max');
+}
+
+export function invalidateCompanyAssetsCache(): void {
+  revalidateTag(COMPANY_ASSETS_CACHE_TAG, 'max');
 }

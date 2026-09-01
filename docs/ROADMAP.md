@@ -91,9 +91,14 @@ Email + password only (no OAuth / magic-link-only / phone):
 - No logos, search, matching, or saves.
 - See [`JOB_FEED_UI.md`](./JOB_FEED_UI.md).
 
-### 5C — Company logos / assets
+### 5C — Company logos / assets *(code complete; 0012 not applied)*
 
-- Not started. No logo columns in 0010.
+- Shared `company-assets` bucket and public-safe company logo columns.
+- Offline SSRF-hardened discovery CLI (`pnpm companies:assets`).
+- 48×48 initials slot with optional self-hosted WebP overlay.
+- Do not apply [`0012_company_assets.sql`](../supabase/migrations/0012_company_assets.sql)
+  until the live pilot is approved.
+- See [`COMPANY_ASSETS.md`](./COMPANY_ASSETS.md).
 
 ### 5D — Search, filters, attribution, feed QA
 

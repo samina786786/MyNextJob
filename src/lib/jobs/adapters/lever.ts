@@ -181,7 +181,7 @@ export function composeLeverDescriptionHtml(job: LeverJob): string | null {
     }
   }
   if (job.additional?.trim()) parts.push(job.additional.trim());
-  return parts.length > 0 ? parts.join('\n') : null;
+  return parts.length > 0 ? parts.join('\n\n') : null;
 }
 
 export function leverRawPayload(job: LeverJob): Record<string, unknown> {

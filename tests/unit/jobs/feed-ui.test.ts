@@ -22,6 +22,7 @@ function feedJob(overrides: Partial<FeedJob> = {}): FeedJob {
     id: '11111111-1111-4111-8111-111111111111',
     companyId: '22222222-2222-4222-8222-222222222222',
     companyName: 'Acme',
+    companyLogoUrl: null,
     title: 'Engineer',
     locationText: 'Bengaluru',
     city: 'Bengaluru',
@@ -172,6 +173,7 @@ describe('feed card DTO', () => {
   it('omits apply URLs and internal fields', () => {
     const card = toFeedCardJob(feedJob(), 'Greenhouse');
     expect(card.sourceLabel).toBe('Greenhouse');
+    expect(card.companyLogoUrl).toBeNull();
     expect(card).not.toHaveProperty('applyUrl');
     expect(card).not.toHaveProperty('sourceUrl');
     expect(card).not.toHaveProperty('rawPayload');
@@ -184,6 +186,20 @@ describe('feed card DTO', () => {
     expect(collectForbiddenFeedFields({ fingerprint: 'abc', items: [{ content_hash: 'x' }] })).toEqual(
       expect.arrayContaining(['fingerprint', 'content_hash']),
     );
+  });
+
+  it('carries a public logo URL without storage internals', () => {
+    const card = toFeedCardJob(
+      feedJob({
+        companyLogoUrl:
+          'https://abc.supabase.co/storage/v1/object/public/company-assets/companies/22222222-2222-4222-8222-222222222222/logo.webp',
+      }),
+      'Lever',
+    );
+    expect(card.companyLogoUrl).toContain('/company-assets/');
+    expect(card).not.toHaveProperty('logo_storage_path');
+    expect(card).not.toHaveProperty('logoStatus');
+    expect(card).not.toHaveProperty('logo_status');
   });
 });
 

@@ -7,6 +7,7 @@ import { ClayCard } from '@/components/clay/ClayCard';
 import { JobCard } from '@/features/jobs/components/JobCard';
 import { JobCardSkeleton } from '@/features/jobs/components/JobCardSkeleton';
 import type { FeedCardJob, FeedPageResponse } from '@/lib/jobs/feed/card';
+import { FEED_LOGO_PRIORITY_COUNT } from '@/lib/jobs/feed/logo-priority';
 import {
   createFeedPaginationState,
   feedPaginationReducer,
@@ -122,9 +123,14 @@ export function JobsFeed({
         {state.statusMessage}
       </div>
       <ul aria-label="Fresh jobs" className="space-y-4">
-        {state.items.map((job) => (
+        {state.items.map((job, index) => (
           <li key={job.id}>
-            <JobCard job={job} asOf={asOf} appear={!initialIds.has(job.id)} />
+            <JobCard
+              job={job}
+              asOf={asOf}
+              appear={!initialIds.has(job.id)}
+              priority={initialIds.has(job.id) && index < FEED_LOGO_PRIORITY_COUNT}
+            />
           </li>
         ))}
       </ul>
@@ -153,6 +159,7 @@ export function JobsFeed({
             variant="secondary"
             size="lg"
             block
+            className="scroll-mb-36"
             disabled={state.loadingNext}
             onClick={() => void loadNext()}
           >
@@ -160,7 +167,7 @@ export function JobsFeed({
           </ClayButton>
         </>
       ) : (
-        <p className="px-1 pb-4 text-center text-sm text-secondary">
+        <p className="scroll-mb-36 px-1 pb-8 text-center text-sm text-secondary">
           You&apos;ve reached the end of the current fresh-job catalog.
         </p>
       )}

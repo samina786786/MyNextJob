@@ -97,9 +97,10 @@ Before every future task:
 ## Scope control
 
 - Do **not** implement work from later phases unless explicitly instructed.
-- Phase 5B (production job feed UI) is implemented. Do not add matching,
-  notifications, application tracking, logos, search/filters, cron, or AI
-  unless a later phase asks for it.
+- Phase 5C (company identity assets) is implemented in code. Do not apply
+  migration 0012 or run `--apply` against production until the live
+  pilot is approved. Do not add matching, notifications, application
+  tracking, search/filters, cron, or AI unless a later phase asks for it.
 - Phases: 0 Foundation · 1 Auth · 2 Profile+Resume · 3 Job Engine ·
   4 Sources · 5 Discovery UI (5A feed foundation · 5B UI · 5C logos ·
   5D search · 5E source registry) · 6 Matching · 7 Applications ·
@@ -277,13 +278,34 @@ Before every future task:
   **zero** user-specific information (no cookies, claims, user id, profile).
 - Authenticated HTTP responses (`GET /api/jobs/feed`) are private
   (`Cache-Control: private, no-store`). Do not publicly cache them.
-- One page query provides company names and batched source attribution.
-  No per-card DB or network waterfall. No logos until Phase 5C.
+- One page query provides company names, logo URLs when ready, and batched
+  source attribution. No per-card DB or network waterfall. The browser
+  never discovers logos.
 - No match scores until Phase 6. No fake applicant counts.
 - No list virtualization without evidence it is needed.
 - CLI ingestion cannot invalidate the Next Data Cache. Short `jobsFresh`
   TTL is the correctness fallback until Phase 10.
 - See [`docs/JOB_FEED_UI.md`](docs/JOB_FEED_UI.md).
+
+## Company assets (Phase 5C invariants)
+
+- Company logos are **shared catalog data**, never user-specific.
+- Never discover logos in the browser or the Next.js feed/detail request
+  path. Discovery is `pnpm companies:assets` only.
+- Never guess domains from company names. Trusted `companies.domain` or
+  initials.
+- No runtime third-party logo API (Clearbit, Brandfetch, logo.dev, …).
+- Outbound asset requests are SSRF-hardened (HTTPS, DNS check, redirect
+  re-validation, bounded body). Fail closed.
+- Raw SVG is never exposed to users. Normalize to a self-hosted WebP.
+- One asset per canonical company: `companies/<id>/logo.webp`.
+- Deterministic initials are a first-class fallback. No blank or broken
+  logo slot. No per-card homepage/favicon waterfall.
+- We Work Remotely is source attribution, not employer identity.
+- Logos do not influence job matching.
+- No cron yet. Do not auto-refresh ready assets when a domain changes
+  hands.
+- See [`docs/COMPANY_ASSETS.md`](docs/COMPANY_ASSETS.md).
 
 ## When in doubt
 

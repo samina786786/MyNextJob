@@ -142,6 +142,51 @@ describe('Lever mapping', () => {
     expect(html?.split('Join the product team.').length).toBe(2);
   });
 
+  it('does not concatenate Lever description sections into glued sentences', () => {
+    const composed = composeLeverDescriptionHtml(
+      leverJobFixture({
+        description: '<div>Turn ideas into structured briefs.</div>',
+        lists: [{ text: '', content: '<li>Edit articles to ensure clarity.</li>' }],
+        additional: '<p>Help scale our publishing.</p>',
+      }) as never,
+    );
+    expect(composed).toContain('\n\n');
+    expect(composed).not.toMatch(/briefs\.Edit/);
+
+    const mapped = mapLeverJob(
+      leverJobFixture({
+        description: '<div>Turn ideas into structured briefs.</div><div>Edit articles to ensure clarity.</div>',
+        lists: [],
+        additional: '',
+      }),
+      MAP_INPUT,
+    );
+    expect(mapped.ok).toBe(true);
+    if (!mapped.ok) return;
+    const prepared = prepareNormalizedJob(mapped.job);
+    expect(prepared.descriptionHtml).not.toMatch(/briefs\.Edit/);
+    expect(prepared.descriptionText).not.toMatch(/briefs\.Edit/);
+    expect(prepared.descriptionText).toMatch(/briefs\.\s+Edit/);
+  });
+
+  it('repairs glued sentences already present in a single Lever HTML blob', () => {
+    const mapped = mapLeverJob(
+      leverJobFixture({
+        description:
+          'Turn ideas into structured briefs.Edit articles to ensure clarity.Track content progress.',
+        lists: [],
+        additional: '',
+      }),
+      MAP_INPUT,
+    );
+    expect(mapped.ok).toBe(true);
+    if (!mapped.ok) return;
+    const prepared = prepareNormalizedJob(mapped.job);
+    expect(prepared.descriptionHtml).not.toMatch(/briefs\.Edit/);
+    expect(prepared.descriptionText).toMatch(/briefs\. Edit articles/);
+    expect(prepared.descriptionText).toMatch(/clarity\. Track/);
+  });
+
   it('sanitizes unsafe Lever HTML through the Phase 3 sanitizer', () => {
     const result = mapLeverJob(
       leverJobFixture({

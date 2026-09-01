@@ -8,6 +8,7 @@ import type { EmploymentType, RemoteType, SalaryPeriod } from '@/lib/jobs/types'
 export type FeedCardJob = {
   id: string;
   companyName: string | null;
+  companyLogoUrl: string | null;
   title: string;
   locationText: string | null;
   city: string | null;
@@ -35,6 +36,7 @@ export function toFeedCardJob(job: FeedJob, sourceLabel: string | null): FeedCar
   return {
     id: job.id,
     companyName: job.companyName,
+    companyLogoUrl: job.companyLogoUrl,
     title: job.title,
     locationText: job.locationText,
     city: job.city,

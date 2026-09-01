@@ -1,7 +1,7 @@
 import { companyInitials } from '@/lib/jobs/feed/company-initials';
 import { cn } from '@/lib/utils';
 
-/** Fixed 48px slot. Phase 5C will replace the interior with a cached logo. */
+/** Fixed 48px company identity slot. Logos overlay this; geometry stays. */
 export function CompanyInitialsTile({
   name,
   size = 'md',

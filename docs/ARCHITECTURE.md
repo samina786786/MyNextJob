@@ -119,7 +119,9 @@ Phase 5A adds the 30-day active catalog, `staleSkipped` admission, a
 keyset feed read model, and a content-hash sync fast path. See
 [`JOB_FEED_FOUNDATION.md`](./JOB_FEED_FOUNDATION.md). Phase 5B is the
 visual feed, infinite scroll, and job detail. See
-[`JOB_FEED_UI.md`](./JOB_FEED_UI.md).
+[`JOB_FEED_UI.md`](./JOB_FEED_UI.md). Phase 5C adds a shared company
+logo pipeline (admin CLI + self-hosted WebP). Discovery never runs on
+the user request path. See [`COMPANY_ASSETS.md`](./COMPANY_ASSETS.md).
 
 ## Normalized job model
 

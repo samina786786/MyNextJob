@@ -221,6 +221,27 @@
   margin: 0 0 0.85rem;
 }
 
+.job-description p:last-child,
+.job-description ul:last-child,
+.job-description ol:last-child,
+.job-description blockquote:last-child {
+  margin-bottom: 0;
+}
+
+.job-description li {
+  margin: 0 0 0.4rem;
+}
+
+.job-description li:last-child {
+  margin-bottom: 0;
+}
+
+.job-description br {
+  content: "";
+  display: block;
+  margin-top: 0.75rem;
+}
+
 .job-description h2,
 .job-description h3,
 .job-description h4 {

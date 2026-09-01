@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { clayButton } from '@/components/clay/clayButtonStyles';
 import { ClayBadge } from '@/components/clay/ClayBadge';
 import { ClayCard } from '@/components/clay/ClayCard';
-import { CompanyInitialsTile } from '@/features/jobs/components/CompanyInitialsTile';
+import { CompanyLogoTile } from '@/features/jobs/components/CompanyLogoTile';
 import { freshnessWording } from '@/lib/jobs/feed/relative-time';
 import { formatSalary } from '@/lib/jobs/feed/salary-display';
 import type { JobDetailDto } from '@/lib/jobs/feed/supabase-detail';
@@ -38,13 +38,15 @@ export function JobDetailView({ job, asOf }: { job: JobDetailDto; asOf: string }
   const company = job.companyName?.trim() || 'Company';
 
   return (
-    <article className="space-y-5">
+    <article className="scroll-mb-36 space-y-5 pb-8">
       <header className="space-y-4">
         <div className="flex items-start gap-3">
-          <CompanyInitialsTile name={job.companyName} size="lg" />
+          <CompanyLogoTile name={job.companyName} logoUrl={job.companyLogoUrl} size="lg" priority />
           <div className="min-w-0">
             <p className="text-sm font-medium text-secondary">{company}</p>
-            <h1 className="text-[26px] font-semibold leading-tight text-foreground">{job.title}</h1>
+            <h1 className="break-words text-[26px] font-semibold leading-tight text-foreground">
+              {job.title}
+            </h1>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">

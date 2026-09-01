@@ -10,6 +10,7 @@ function job(id: string): FeedCardJob {
   return {
     id,
     companyName: 'Acme',
+    companyLogoUrl: null,
     title: `Role ${id}`,
     locationText: null,
     city: null,

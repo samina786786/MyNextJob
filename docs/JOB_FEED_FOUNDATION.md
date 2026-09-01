@@ -172,5 +172,6 @@ configured `companyId`. No cron.
 - `region` is not stored on `jobs`
 - Unchanged fast path still does not rewrite URLs when the hash matches
 - Orphan-company cleanup is deferred
-- Matching, search, and logos are later subphases (5C+)
+- Matching and search are later subphases (5D+)
+- Company logos are Phase 5C — [`COMPANY_ASSETS.md`](./COMPANY_ASSETS.md)
 - Feed UI is Phase 5B — [`JOB_FEED_UI.md`](./JOB_FEED_UI.md)

@@ -5,7 +5,7 @@ import { motion, useReducedMotion } from 'motion/react';
 
 import { ClayBadge } from '@/components/clay/ClayBadge';
 import { ClayCard } from '@/components/clay/ClayCard';
-import { CompanyInitialsTile } from '@/features/jobs/components/CompanyInitialsTile';
+import { CompanyLogoTile } from '@/features/jobs/components/CompanyLogoTile';
 import type { FeedCardJob } from '@/lib/jobs/feed/card';
 import { freshnessWording } from '@/lib/jobs/feed/relative-time';
 import { formatSalary } from '@/lib/jobs/feed/salary-display';
@@ -15,10 +15,12 @@ export function JobCard({
   job,
   asOf,
   appear = false,
+  priority = false,
 }: {
   job: FeedCardJob;
   asOf: string;
   appear?: boolean;
+  priority?: boolean;
 }) {
   const reduced = useReducedMotion();
   const freshness = freshnessWording({
@@ -34,9 +36,11 @@ export function JobCard({
   const card = (
     <ClayCard depth="raised" radius="xl" padding="lg" className="h-full space-y-3">
       <div className="flex items-start gap-3">
-        <CompanyInitialsTile name={job.companyName} />
+        <CompanyLogoTile name={job.companyName} logoUrl={job.companyLogoUrl} priority={priority} />
         <div className="min-w-0 flex-1">
-          <h3 className="text-[17px] font-semibold leading-snug text-foreground">{job.title}</h3>
+          <h3 className="break-words text-[17px] font-semibold leading-snug text-foreground">
+            {job.title}
+          </h3>
           <p className="mt-0.5 truncate text-sm text-secondary">{company}</p>
         </div>
       </div>

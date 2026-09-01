@@ -10,8 +10,18 @@ See also [`JOB_FEED_FOUNDATION.md`](./JOB_FEED_FOUNDATION.md).
 ## Server-first initial load
 
 Authenticated `/home` resolves auth and onboarding **outside** the
-shared cache, then streams `<JobsFeedSection>` behind a section-level
-Suspense boundary.
+shared cache. There is **no** route-level `loading.tsx`. The page chrome
+is synchronous:
+
+- MyNextJob brand
+- greeting / profile summary (own Suspense; time-of-day fallback)
+- **Fresh jobs**
+- “Latest opportunities from the active catalog.”
+
+Only `<HomeJobsFeed>` / `<JobsFeedSection>` sits behind the job-card
+skeleton boundary (5 geometry-matching cards). The app layout
+`RouteSuspense` fallback is a generic pulse, not a job-feed skeleton, so
+`/profile` and onboarding do not look like Home.
 
 1. `requireAuth` / profile greeting (request-specific)
 2. `loadSharedFeedPage({ cursor: null, limit: 15 })`
@@ -65,6 +75,7 @@ Authenticated pages stay request-specific. The catalog functions use
 Tags (central helpers in `src/lib/jobs/feed/cache-tags.ts`):
 
 - `jobs-feed`
+- `company-assets`
 - `job:<jobId>`
 
 Cached functions (`src/lib/jobs/feed/cached.ts`) accept only `cursor` +
@@ -113,10 +124,14 @@ browser.
 (`job:<id>`). If the job is missing, closed, or outside the 30-day
 window: “This job is no longer in the active catalog.”
 
-Description uses stored `description_html` (already sanitized). Fallback
-is plain `description_text`. Apply now uses `apply_url`, then
-`source_url`, HTTP(S) only, `rel="noopener noreferrer"`. No application
-rows.
+Description uses stored `description_html` (already sanitized at ingest).
+Read-time `formatStoredDescription` also splits glued sentences
+(`briefs.Edit` → `briefs. Edit` / `<br />`) so already-ingested rows
+stay readable without a catalog rewrite. Fallback is plain
+`description_text` with the same separators. Apply now uses
+`apply_url`, then `source_url`, HTTP(S) only,
+`rel="noopener noreferrer"`. No application rows. Provider `style` /
+`class` never survive the Phase 3 sanitizer.
 
 ## Loading and errors
 
@@ -138,8 +153,12 @@ controls, visible focus, `<time datetime>`, polite `aria-live` for
 
 ## Company identity
 
-48×48 deterministic initials tile. No remote images. Phase 5C replaces
-the interior of this slot.
+Fixed 48×48 slot on cards and detail. Deterministic initials always
+render. When `companyLogoUrl` is present (status `ready`), Next Image
+overlays the self-hosted WebP after decode. Failed loads keep initials.
+First 5 server-rendered logos may use `priority`; later cards lazy-load.
+The browser never fetches company homepages or third-party logo APIs.
+See [`COMPANY_ASSETS.md`](./COMPANY_ASSETS.md).
 
 ## Performance (local live catalog, 126 fresh jobs)
 
@@ -160,7 +179,7 @@ requests until revalidate/expire. CLI sync does not purge this cache.
 
 ## Known deferred work
 
-- Real logos → 5C
+- Real logos → 5C (code complete; 0012 + live pilot pending)
 - Search / filters → 5D
 - Matching / scores → 6
 - Saves / applications → 7

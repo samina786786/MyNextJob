@@ -3,7 +3,7 @@ import 'server-only';
 import { cacheLife, cacheTag } from 'next/cache';
 
 import { toFeedCardJob, type FeedPageResponse } from '@/lib/jobs/feed/card';
-import { JOBS_FEED_CACHE_TAG, JOBS_FRESH_CACHE_LIFE, jobCacheTag } from '@/lib/jobs/feed/cache-tags';
+import { JOBS_FEED_CACHE_TAG, COMPANY_ASSETS_CACHE_TAG, JOBS_FRESH_CACHE_LIFE, jobCacheTag } from '@/lib/jobs/feed/cache-tags';
 import { getAttributionLabelsByJobIds } from '@/lib/jobs/feed/supabase-attribution';
 import { getFreshJobDetailFromClient, type JobDetailDto } from '@/lib/jobs/feed/supabase-detail';
 import { getFreshJobsPageFromClient } from '@/lib/jobs/feed/supabase-feed';
@@ -26,6 +26,7 @@ export async function getCachedFreshJobsPage(
   'use cache';
   cacheLife(JOBS_FRESH_CACHE_LIFE);
   cacheTag(JOBS_FEED_CACHE_TAG);
+  cacheTag(COMPANY_ASSETS_CACHE_TAG);
 
   logCacheMiss('feed', { cursor, limit });
 
@@ -52,6 +53,7 @@ export async function getCachedFreshJobDetail(jobId: string): Promise<JobDetailD
   'use cache';
   cacheLife(JOBS_FRESH_CACHE_LIFE);
   cacheTag(JOBS_FEED_CACHE_TAG);
+  cacheTag(COMPANY_ASSETS_CACHE_TAG);
   cacheTag(jobCacheTag(jobId));
 
   logCacheMiss('detail', { jobId, limit: 1 });

@@ -93,10 +93,15 @@ The matching engine and notification worker both read from here.
 ### `companies`
 
 Shared reference data about companies MyNextJob knows about. Includes
-name, slug (`citext`), `name_key` (comparison fold), domain, logo URL,
-careers URL, industry, and ATS provider details. When `domain` is
+name, slug (`citext`), `name_key` (comparison fold), domain, unused
+legacy `logo_url`, careers URL, industry, and ATS provider details.
+Phase 5C adds public-safe logo metadata (`logo_status`,
+`logo_storage_path`, `logo_updated_at`, `logo_checked_at`) in
+[`0012_company_assets.sql`](../supabase/migrations/0012_company_assets.sql)
+(not applied until the live pilot). When `domain` is
 present it is the strong identity: unique on `lower(domain)` (partial,
-non-null). Ingestion workers upsert into this table.
+non-null). Ingestion workers upsert into this table. Logo discovery
+never invents a domain.
 
 ### `job_sources`
 
@@ -240,3 +245,13 @@ Every object path must start with `{user_id}/`, and the policies use
 
 Never generate public URLs for resume objects. Server code should mint
 short-lived signed URLs when a user needs to view or download their file.
+
+## Storage policies (`company-assets` bucket)
+
+Public-read brand assets for known object URLs
+(`companies/<company-id>/logo.webp`). The bucket is `public = true`,
+256 KB, `image/webp` only. There is **no** `SELECT` policy on
+`storage.objects` for this bucket so listing stays closed (lint 0025).
+Writes go through `service_role` / `pnpm companies:assets --apply`.
+Authenticated browser users cannot upload. The private `resumes` bucket
+is unchanged. See [`COMPANY_ASSETS.md`](./COMPANY_ASSETS.md).

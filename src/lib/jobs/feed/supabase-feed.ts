@@ -1,12 +1,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { clampFeedLimit, decodeFeedCursor, encodeFeedCursor } from '@/lib/jobs/feed/cursor';
+import {
+  COMPANY_FEED_EMBED_NAME_ONLY,
+  COMPANY_FEED_EMBED_WITH_LOGO,
+  isMissingCompanyLogoColumn,
+  readCompanyFeedFields,
+  type CompanyFeedEmbedRow,
+} from '@/lib/jobs/feed/company-fields';
 import type { FeedJob, FreshJobsPage } from '@/lib/jobs/feed/types';
 import { catalogCutoff } from '@/lib/jobs/freshness';
 import { PersistenceError } from '@/lib/jobs/errors';
 import type { EmploymentType, JobStatus, RemoteType, SalaryPeriod } from '@/lib/jobs/types';
 
-const FEED_SELECT = [
+const FEED_COLUMNS = [
   'id',
   'company_id',
   'title',
@@ -25,8 +32,10 @@ const FEED_SELECT = [
   'status',
   'apply_url',
   'source_url',
-  'companies(name)',
-].join(',');
+] as const;
+
+const FEED_SELECT_WITH_LOGO = [...FEED_COLUMNS, COMPANY_FEED_EMBED_WITH_LOGO].join(',');
+const FEED_SELECT_NAME_ONLY = [...FEED_COLUMNS, COMPANY_FEED_EMBED_NAME_ONLY].join(',');
 
 type FeedRow = {
   id: string;
@@ -47,12 +56,13 @@ type FeedRow = {
   status: JobStatus;
   apply_url: string | null;
   source_url: string | null;
-  companies: { name: string } | { name: string }[] | null;
+  companies: CompanyFeedEmbedRow | CompanyFeedEmbedRow[] | null;
 };
 
 /**
  * Live keyset page. Requires migration 0010 (freshness_at).
  * Uses the service-role client; never returns raw_payload or hashes.
+ * Logo columns require 0012; older schemas fall back to company name only.
  */
 export async function getFreshJobsPageFromClient(
   client: SupabaseClient,
@@ -63,23 +73,15 @@ export async function getFreshJobsPageFromClient(
   const cutoff = catalogCutoff(now).toISOString();
   const cursor = input.cursor ? decodeFeedCursor(input.cursor) : null;
 
-  let query = client
-    .from('jobs')
-    .select(FEED_SELECT)
-    .eq('status', 'open')
-    .gte('freshness_at', cutoff)
-    .order('freshness_at', { ascending: false })
-    .order('id', { ascending: false })
-    .limit(limit + 1);
-
-  if (cursor) {
-    const t = cursor.freshnessAt.toISOString();
-    query = query.or(
-      `freshness_at.lt."${t}",and(freshness_at.eq."${t}",id.lt.${cursor.id})`,
-    );
+  const first = await queryFeedPage(client, FEED_SELECT_WITH_LOGO, { cutoff, cursor, limit });
+  let data = first.data;
+  let error = first.error;
+  if (error && isMissingCompanyLogoColumn(error.message)) {
+    const retry = await queryFeedPage(client, FEED_SELECT_NAME_ONLY, { cutoff, cursor, limit });
+    data = retry.data;
+    error = retry.error;
   }
 
-  const { data, error } = await query;
   if (error) {
     throw new PersistenceError(
       error.message.includes('freshness_at')
@@ -88,17 +90,17 @@ export async function getFreshJobsPageFromClient(
     );
   }
 
-  const rows = (data as unknown as FeedRow[] | null) ?? [];
+  const rows = (data as FeedRow[] | null) ?? [];
   const hasNextPage = rows.length > limit;
   const page = hasNextPage ? rows.slice(0, limit) : rows;
   const jobs: FeedJob[] = page.map((row) => {
-    const related = row.companies;
-    const companyName = Array.isArray(related) ? related[0]?.name ?? null : related?.name ?? null;
+    const company = readCompanyFeedFields(row.companies);
     const freshness = new Date(row.freshness_at);
     return {
       id: row.id,
       companyId: row.company_id,
-      companyName,
+      companyName: company.name,
+      companyLogoUrl: company.logoUrl,
       title: row.title,
       locationText: row.location_text,
       city: row.city,
@@ -126,4 +128,32 @@ export async function getFreshJobsPageFromClient(
     nextCursor:
       hasNextPage && last ? encodeFeedCursor({ freshnessAt: last.freshnessAt, id: last.id }) : null,
   };
+}
+
+async function queryFeedPage(
+  client: SupabaseClient,
+  select: string,
+  input: {
+    cutoff: string;
+    cursor: { freshnessAt: Date; id: string } | null;
+    limit: number;
+  },
+) {
+  let query = client
+    .from('jobs')
+    .select(select)
+    .eq('status', 'open')
+    .gte('freshness_at', input.cutoff)
+    .order('freshness_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(input.limit + 1);
+
+  if (input.cursor) {
+    const t = input.cursor.freshnessAt.toISOString();
+    query = query.or(
+      `freshness_at.lt."${t}",and(freshness_at.eq."${t}",id.lt.${input.cursor.id})`,
+    );
+  }
+
+  return query;
 }

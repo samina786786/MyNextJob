@@ -5,6 +5,7 @@ export type FeedJob = {
   id: string;
   companyId: string | null;
   companyName: string | null;
+  companyLogoUrl: string | null;
   title: string;
   locationText: string | null;
   city: string | null;
@@ -41,6 +42,7 @@ export function toFeedJob(job: CanonicalJobRecord, company: CompanyRecord | null
     id: job.id,
     companyId: job.companyId,
     companyName: company?.name ?? null,
+    companyLogoUrl: null,
     title: job.title,
     locationText: job.locationText,
     city: job.city,

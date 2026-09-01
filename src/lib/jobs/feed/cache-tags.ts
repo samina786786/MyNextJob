@@ -3,6 +3,7 @@
  * CLI ingestion cannot call these — see invalidate.ts.
  */
 export const JOBS_FEED_CACHE_TAG = 'jobs-feed';
+export const COMPANY_ASSETS_CACHE_TAG = 'company-assets';
 
 /** Matches `cacheLife.jobsFresh` in next.config.mjs. */
 export const JOBS_FRESH_CACHE_LIFE = {
