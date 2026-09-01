@@ -33,9 +33,19 @@ for cleanup.
 [`0011_job_grant_hardening.sql`](../supabase/migrations/0011_job_grant_hardening.sql)
 revokes leftover client TRUNCATE/REFERENCES/TRIGGER/MAINTAIN on **all**
 current `public` tables and hardens `postgres` default privileges so new
-tables do not get those leftovers. Do not apply 0011 automatically.
-Review each before applying. See [`JOB_ENGINE.md`](./JOB_ENGINE.md) and
-the Phase 4 source docs.
+tables do not get those leftovers. Phase 5D adds
+[`0013_job_search_filters.sql`](../supabase/migrations/0013_job_search_filters.sql)
+(**not applied**): enables `pg_trgm` and adds trigram GIN indexes on
+the **raw** columns `jobs.title`, `companies.name`, `jobs.location_text`,
+`jobs.city`, `jobs.country` (partial on the last three), plus a partial
+composite `(remote_type, freshness_at DESC, id DESC) WHERE status='open'`
+for the work-mode filtered feed. Indexes are on the raw columns
+because PostgREST emits `col ILIKE '%value%'` on the raw column, and
+`gin_trgm_ops` supports both `LIKE` and `ILIKE` directly on the
+indexed column. No new columns; no new SELECT grants. Do not apply 0011 or 0013 automatically. Review
+each before applying. See [`JOB_ENGINE.md`](./JOB_ENGINE.md),
+[`JOB_SEARCH_FILTERS.md`](./JOB_SEARCH_FILTERS.md), and the Phase 4
+source docs.
 
 Every user-owned table has RLS enabled with owner-only policies. Shared
 read-mostly tables (companies, jobs, skills, job_skills, job_sources)

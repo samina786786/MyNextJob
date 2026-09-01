@@ -122,6 +122,14 @@ logo overlays after `onLoad`. `onError` keeps initials. First 5
 server-rendered cards may use Next Image `priority`; later cards lazy-load.
 Company name stays the accessible label; the image `alt` is empty.
 
+**Transparency layering (Phase 5D fix).** Once the image reports
+`onLoad`, the initials layer is *hidden* — `aria-hidden="true"`,
+`invisible`, and `opacity-0` — not merely covered. Marks with
+transparent regions (Dscout regression) previously showed a stray
+fallback letter through the artwork; the fix works for every future
+transparent logo, not just Dscout. `data-company-fallback="visible"`
+vs `"hidden"` is exposed on the fallback element for regression tests.
+
 Source attribution (for example We Work Remotely) is not the employer logo.
 
 Logos do not affect matching.

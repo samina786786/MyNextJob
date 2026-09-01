@@ -7,6 +7,18 @@ import { useState } from 'react';
 import { CompanyInitialsTile } from '@/features/jobs/components/CompanyInitialsTile';
 import { cn } from '@/lib/utils';
 
+/**
+ * Fixed 48×48 identity slot. Initials render immediately. A loaded logo
+ * overlays the initials only after the image has decoded successfully. On
+ * successful load the initials layer is *hidden* — otherwise transparent
+ * regions of the logo would show a stray fallback letter bleeding through
+ * (regression seen with the Dscout mark).
+ *
+ * State machine:
+ *   loaded=false, failed=false  →  initials visible, image hidden (opacity 0)
+ *   loaded=true , failed=false  →  initials HIDDEN, image visible
+ *   loaded=*    , failed=true   →  initials visible, image not rendered
+ */
 export function CompanyLogoTile({
   name,
   logoUrl,
@@ -29,7 +41,19 @@ export function CompanyLogoTile({
       data-company-identity={identity}
       className="relative inline-flex h-12 w-12 shrink-0 overflow-hidden rounded-clay-md"
     >
-      <CompanyInitialsTile name={name} size={size} />
+      <span
+        data-company-fallback={showImage && loaded ? 'hidden' : 'visible'}
+        aria-hidden={showImage && loaded ? 'true' : undefined}
+        className={cn(
+          'absolute inset-0 inline-flex',
+          // Hidden entirely once the logo is loaded so transparent pixels
+          // cannot reveal the fallback letter.
+          showImage && loaded ? 'invisible opacity-0' : 'visible opacity-100',
+          !reduced && 'transition-opacity duration-150',
+        )}
+      >
+        <CompanyInitialsTile name={name} size={size} />
+      </span>
       {showImage && logoUrl ? (
         <Image
           src={logoUrl}

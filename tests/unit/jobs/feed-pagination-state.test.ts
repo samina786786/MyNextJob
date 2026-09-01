@@ -92,4 +92,39 @@ describe('feed pagination state', () => {
     expect(next).toBe(ended);
     expect(next.loadingNext).toBe(false);
   });
+
+  it('filter-success replaces items and resets cursor without appending previous filter data', () => {
+    let state = createFeedPaginationState({
+      items: PAGE1,
+      nextCursor: 'cursor-page-2',
+      hasNextPage: true,
+    });
+    state = feedPaginationReducer(state, { type: 'filter-start' });
+    expect(state.filterUpdating).toBe(true);
+    expect(state.statusMessage).toBe('Updating jobs');
+
+    state = feedPaginationReducer(state, {
+      type: 'filter-success',
+      items: PAGE2,
+      nextCursor: 'cursor-page-2b',
+      hasNextPage: true,
+    });
+    expect(state.items).toEqual(PAGE2);
+    expect(state.nextCursor).toBe('cursor-page-2b');
+    expect(state.filterUpdating).toBe(false);
+    expect(state.statusMessage).toBe('1 jobs shown');
+  });
+
+  it('filter-failure keeps the previous items visible', () => {
+    let state = createFeedPaginationState({
+      items: PAGE1,
+      nextCursor: 'cursor-page-2',
+      hasNextPage: true,
+    });
+    state = feedPaginationReducer(state, { type: 'filter-start' });
+    state = feedPaginationReducer(state, { type: 'filter-failure' });
+    expect(state.filterError).toBe(true);
+    expect(state.filterUpdating).toBe(false);
+    expect(state.items).toEqual(PAGE1);
+  });
 });

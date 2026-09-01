@@ -75,7 +75,7 @@ export default function LandingPage() {
 
       <ClayInput
         leading={<Search size={18} aria-hidden="true" />}
-        placeholder="Search roles, companies, skills…"
+        placeholder="Search jobs or companies…"
         aria-label="Search jobs"
         readOnly
       />

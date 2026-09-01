@@ -100,9 +100,26 @@ Email + password only (no OAuth / magic-link-only / phone):
   until the live pilot is approved.
 - See [`COMPANY_ASSETS.md`](./COMPANY_ASSETS.md).
 
-### 5D — Search, filters, attribution, feed QA
+### 5D — Search, filters, attribution, feed QA *(code complete; 0013 not applied)*
 
-- Not started. Feed repository filters are reserved, not implemented.
+- Lexical catalog search (`q`) over `jobs.title` and `companies.name`
+  (company preflight).
+- Categorical filters: `work` (remote/hybrid/onsite), `employment`
+  (full_time/…/temporary), `location` (free text), `age` (1/7/14/30 days,
+  capped at the 30-day catalog).
+- URL is the source of truth. `/home?q=…&work=…` server-renders the
+  first filtered page.
+- Debounce + AbortController + filter-equality guard prevent stale
+  responses from overwriting newer ones.
+- Cursor is invalidated on any filter/query change; filtered feed keeps
+  keyset pagination.
+- Direct employer ATS attribution surfaces as `<Company> Careers`;
+  aggregators keep their brand (`We Work Remotely`).
+- `CompanyLogoTile` transparency layering fix: initials layer is hidden
+  once the logo loads.
+- Do not apply [`0013_job_search_filters.sql`](../supabase/migrations/0013_job_search_filters.sql)
+  until Phase 5D is live-verified. See
+  [`JOB_SEARCH_FILTERS.md`](./JOB_SEARCH_FILTERS.md).
 
 ### 5E — Source registry expansion
 

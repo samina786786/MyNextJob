@@ -14,8 +14,15 @@ test.describe('MyNextJob — Phase 2 onboarding', () => {
   });
 
   test('onboarding routes have no mobile horizontal overflow after the auth wall', async ({ page }) => {
+    // These routes are protected; anonymous requests redirect to /sign-in.
+    // Default `page.goto` waits for `load`, which the browser aborts when
+    // the app fires a client-side redirect mid-navigation — surfaced as
+    // `net::ERR_ABORTED`. Using `domcontentloaded` returns as soon as the
+    // DOM is parsed, and we explicitly wait for the sign-in URL to settle
+    // before measuring so we always inspect a real rendered layout.
     for (const path of ['/onboarding/resume', '/onboarding/profile', '/onboarding/preferences', '/profile']) {
-      await page.goto(path);
+      await page.goto(path, { waitUntil: 'domcontentloaded' });
+      await page.waitForURL(/\/sign-in/, { timeout: 20_000 });
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );

@@ -99,8 +99,12 @@ Before every future task:
 - Do **not** implement work from later phases unless explicitly instructed.
 - Phase 5C (company identity assets) is implemented in code. Do not apply
   migration 0012 or run `--apply` against production until the live
-  pilot is approved. Do not add matching, notifications, application
-  tracking, search/filters, cron, or AI unless a later phase asks for it.
+  pilot is approved.
+- Phase 5D (search & filters) is implemented in code. Migration 0013
+  (`0013_job_search_filters.sql`) adds `pg_trgm` and trigram indexes;
+  **do not apply** until Phase 5D is live-verified. Do not add matching,
+  notifications, application tracking, cron, or AI unless a later phase
+  asks for it.
 - Phases: 0 Foundation · 1 Auth · 2 Profile+Resume · 3 Job Engine ·
   4 Sources · 5 Discovery UI (5A feed foundation · 5B UI · 5C logos ·
   5D search · 5E source registry) · 6 Matching · 7 Applications ·
@@ -306,6 +310,50 @@ Before every future task:
 - No cron yet. Do not auto-refresh ready assets when a domain changes
   hands.
 - See [`docs/COMPANY_ASSETS.md`](docs/COMPANY_ASSETS.md).
+
+## Search & filters (Phase 5D invariants)
+
+- Search and filter queries always operate on the **shared fresh catalog**.
+  User search never calls Greenhouse, Lever, Ashby, WWR, or any company
+  site.
+- Lexical catalog search is **not** resume matching. No fake "relevance"
+  or "match" scores in 5D — freshness `(freshness_at DESC, id DESC)` is
+  the only order.
+- Search and filter state is URL-restorable. `/home?q=…&work=…` server-
+  renders the first filtered page directly; the client never renders an
+  unfiltered page and swaps it after hydration.
+- One canonical parser (`parseFeedFilters`) is used by the server initial
+  page, the API route, the cache key, and the URL builder. Never a
+  second parser.
+- Changing any filter or the query **discards the current cursor** and
+  refetches page 1 with the new filters. Old-filter pagination results
+  are aborted and never appended to the new feed.
+- A stale response must never overwrite a newer one. Debounce (~250 ms)
+  + AbortController + filter-equality guard in the reducer.
+- Freshness is capped at 30 days. `age` may narrow (1/7/14) but never
+  widen. A user cannot URL-hack their way into the historical archive.
+- No expensive per-filter facet counts (no `Remote (42)`). No fake
+  applicant counts.
+- No full-catalog browser filtering. Search is server-side; browser only
+  hits `/api/jobs/feed`.
+- Runtime logo discovery stays forbidden. `CompanyLogoTile` must **hide
+  the initials layer** once the logo has decoded (`aria-hidden="true"`,
+  `invisible`, `opacity-0`); transparent regions of a loaded logo must
+  never reveal a fallback letter.
+- Direct employer ATS attribution is preferred over aggregator provenance
+  for the user-facing label (`<Company> Careers` vs `We Work Remotely`).
+  All provenance rows stay intact in `job_source_postings`.
+- The shared search cache contains no user identity, cookies, claims,
+  or profile. Only cursor + limit + normalized filter key.
+- User input reaching PostgREST `.or()` / `.ilike()` builders is
+  neutralized by `escapePostgrestLikeSubstring`, which strips **both**
+  the PostgREST URL grammar (`,`, `(`, `)`, `*`) **and** the SQL LIKE
+  grammar (`%`, `_`, `\`). A raw `%` from user input would otherwise
+  reach PostgreSQL as a SQL wildcard. No raw SQL from the browser or
+  from the server layer.
+- Migration `0013_job_search_filters.sql` (pg_trgm + trigram GIN indexes)
+  is written but **not applied** until Phase 5D is live-verified.
+- See [`docs/JOB_SEARCH_FILTERS.md`](docs/JOB_SEARCH_FILTERS.md).
 
 ## When in doubt
 

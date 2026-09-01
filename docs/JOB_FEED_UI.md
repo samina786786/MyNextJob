@@ -177,10 +177,31 @@ Read-only measurement of the first 15-job page (PostgREST, not Next cache):
 `"use cache"` / `jobsFresh` skips that DB work on subsequent equivalent
 requests until revalidate/expire. CLI sync does not purge this cache.
 
+## Search & filters (Phase 5D — code complete; 0013 pending)
+
+Search (`q`), work mode, employment type, location free-text, and
+freshness age (1/7/14/30 days) live on `/home`. State is URL-persisted
+(`/home?q=react&work=remote,hybrid&…`) and directly server-renders the
+first filtered page. Debounce ~250 ms + AbortController + a filter-
+equality guard in the reducer prevent stale responses from overwriting
+newer ones. Cursor is invalidated on any filter/query change; filtered
+feed keeps keyset pagination. Full contract in
+[`JOB_SEARCH_FILTERS.md`](./JOB_SEARCH_FILTERS.md).
+
+Direct employer ATS attribution now surfaces as `<CompanyName> Careers`
+(implementation detail — Greenhouse / Lever / Ashby — is hidden);
+aggregators (WWR) keep their brand. Provenance rows in
+`job_source_postings` are unchanged.
+
+`CompanyLogoTile` transparency fix: once the logo image reports
+`onLoad`, the initials fallback layer is hidden (`aria-hidden="true"`
++ `invisible` + `opacity-0`). Transparent regions of a loaded mark can
+no longer reveal a stray fallback letter (Dscout regression).
+
 ## Known deferred work
 
-- Real logos → 5C (code complete; 0012 + live pilot pending)
-- Search / filters → 5D
+- Full-text `description_text` search → deferred; revisit at 5E scale
+- `job_skills`-backed structured search → deferred; awaits ingestion
 - Matching / scores → 6
 - Saves / applications → 7
 - Notifications → 8

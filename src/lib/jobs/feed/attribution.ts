@@ -20,19 +20,28 @@ function attributionRank(source: AttributionSource): number {
   return 20;
 }
 
+const ATS_TYPES = new Set(['greenhouse', 'lever', 'ashby']);
+
+/**
+ * Human-facing label. Direct employer ATS surfaces as `<Company> Careers`
+ * because the technical provider name (Greenhouse / Lever / Ashby) is
+ * implementation detail — users care that the job comes straight from the
+ * hiring team, not from an aggregator republish. Aggregators keep their
+ * own brand.
+ *
+ * job_sources.name for Greenhouse/Lever/Ashby seeds is the company display
+ * name (e.g. "Dscout"). For WWR it is the full source name; we normalize
+ * to the aggregator brand.
+ */
 export function displaySourceLabel(source: AttributionSource): string {
-  switch (source.sourceType) {
-    case 'greenhouse':
-      return 'Greenhouse';
-    case 'lever':
-      return 'Lever';
-    case 'ashby':
-      return 'Ashby';
-    case 'we_work_remotely':
-      return 'We Work Remotely';
-    default:
-      return source.name.trim() || 'Listed source';
+  const type = source.sourceType;
+  if (ATS_TYPES.has(type)) {
+    const cleaned = source.name.trim().replace(/\s+careers$/i, '');
+    return cleaned ? `${cleaned} Careers` : 'Employer Careers';
   }
+  if (type === 'we_work_remotely') return 'We Work Remotely';
+  if (type === 'rss') return source.name.trim() || 'Listed source';
+  return source.name.trim() || 'Listed source';
 }
 
 /**

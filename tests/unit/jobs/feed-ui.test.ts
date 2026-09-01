@@ -151,13 +151,21 @@ describe('remote and location rendering', () => {
 });
 
 describe('attribution preference', () => {
-  it('prefers a direct ATS over We Work Remotely', () => {
+  it('prefers a direct ATS over We Work Remotely and shows the employer as “Careers”', () => {
     expect(
       pickAttributionLabel([
         { sourceType: 'we_work_remotely', name: 'We Work Remotely — All Jobs', attributionRequired: true },
-        { sourceType: 'greenhouse', name: 'Acme Greenhouse', attributionRequired: false },
+        { sourceType: 'greenhouse', name: 'Dscout', attributionRequired: false },
       ]),
-    ).toBe('Greenhouse');
+    ).toBe('Dscout Careers');
+  });
+
+  it('does not double the word Careers when the source name already contains it', () => {
+    expect(
+      pickAttributionLabel([
+        { sourceType: 'lever', name: 'Drivetrain Careers', attributionRequired: false },
+      ]),
+    ).toBe('Drivetrain Careers');
   });
 
   it('labels WWR when it is the only source', () => {

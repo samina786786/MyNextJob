@@ -125,6 +125,47 @@ describe('company logo tile', () => {
     expect(document.querySelector('img')).toBeNull();
     expect(document.querySelector('[data-company-identity]')?.textContent).toBe('D');
   });
+
+  it('HIDES the initials fallback once the logo is loaded so transparent pixels do not bleed through', () => {
+    // Simulates the Dscout regression: the official mark has transparent
+    // regions. Before the fix a stray "D" from the fallback showed inside
+    // the loaded mark. After the fix the initials layer becomes invisible
+    // when the image has decoded successfully.
+    render(<CompanyLogoTile name="Dscout" logoUrl={LOGO} />);
+    const fallback = document.querySelector('[data-company-fallback]');
+    expect(fallback).toHaveAttribute('data-company-fallback', 'visible');
+    fireEvent.load(document.querySelector('img')!);
+    expect(document.querySelector('[data-company-fallback]')).toHaveAttribute(
+      'data-company-fallback',
+      'hidden',
+    );
+    // aria-hidden makes the letter unreachable to assistive tech too.
+    expect(document.querySelector('[data-company-fallback]')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
+    // Layered opacity class flip is a defensive backup for browsers that
+    // do not honor the visibility toggle mid-transition.
+    expect(document.querySelector('[data-company-fallback]')).toHaveClass('invisible');
+  });
+
+  it('brings the initials back if the image reports a later error (e.g. cache purge)', () => {
+    render(<CompanyLogoTile name="Dscout" logoUrl={LOGO} />);
+    fireEvent.load(document.querySelector('img')!);
+    expect(document.querySelector('[data-company-identity]')).toHaveAttribute(
+      'data-company-identity',
+      'logo',
+    );
+    fireEvent.error(document.querySelector('img')!);
+    expect(document.querySelector('[data-company-identity]')).toHaveAttribute(
+      'data-company-identity',
+      'initials',
+    );
+    expect(document.querySelector('[data-company-fallback]')).toHaveAttribute(
+      'data-company-fallback',
+      'visible',
+    );
+  });
 });
 
 describe('feed and detail identity slots', () => {

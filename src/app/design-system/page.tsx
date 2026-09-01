@@ -174,7 +174,7 @@ export default function DesignSystemPage() {
       <Section title="Input">
         <ClayInput
           leading={<Search size={18} aria-hidden="true" />}
-          placeholder="Search roles, companies, skills…"
+          placeholder="Search jobs or companies…"
           aria-label="Search"
         />
       </Section>

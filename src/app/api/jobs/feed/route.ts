@@ -24,7 +24,11 @@ export async function GET(request: Request) {
 
   try {
     const parsed = parseFeedQuery(new URL(request.url).searchParams);
-    const page = await loadSharedFeedPage(parsed);
+    const page = await loadSharedFeedPage({
+      cursor: parsed.cursor,
+      limit: parsed.limit,
+      filters: parsed.filters,
+    });
     if (collectForbiddenFeedFields(page).length > 0) {
       return json({ error: 'Something went wrong' }, 500);
     }

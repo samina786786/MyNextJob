@@ -5,10 +5,17 @@ import { Suspense } from 'react';
 import { JobsFeedSection } from '@/features/jobs/components/JobsFeedSection';
 import { JobsFeedSkeleton } from '@/features/jobs/components/JobCardSkeleton';
 import { requireAuth } from '@/lib/auth/session';
+import { EMPTY_FEED_FILTERS, parseFeedFilters, type FeedFilters } from '@/lib/jobs/feed/filters';
 import { gateHomeOrProfile } from '@/lib/onboarding/gate';
 import { firstNameFrom, timeOfDayGreeting } from '@/lib/onboarding/greeting';
 
 export const metadata: Metadata = { title: 'Home' };
+
+/**
+ * Home searchParams are Promises in Next 16. Filter parsing must happen
+ * inside a Suspense boundary so the shell can server-render synchronously.
+ */
+type HomeSearchParams = Record<string, string | string[] | undefined>;
 
 function HomeGreetingFallback() {
   return (
@@ -37,13 +44,29 @@ async function HomeGreeting() {
   );
 }
 
-async function HomeJobsFeed() {
+async function HomeJobsFeed({ searchParams }: { searchParams: Promise<HomeSearchParams> }) {
   const identity = await requireAuth('/home');
   await gateHomeOrProfile(identity.userId);
-  return <JobsFeedSection />;
+  const raw = await searchParams;
+  const params = new URLSearchParams();
+  for (const [name, value] of Object.entries(raw)) {
+    if (value == null) continue;
+    if (Array.isArray(value)) {
+      const first = value[0];
+      if (typeof first === 'string') params.set(name, first);
+    } else if (typeof value === 'string') {
+      params.set(name, value);
+    }
+  }
+  const filters: FeedFilters = params.toString() ? parseFeedFilters(params) : EMPTY_FEED_FILTERS;
+  return <JobsFeedSection filters={filters} />;
 }
 
-export default function HomePage() {
+export default function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<HomeSearchParams>;
+}) {
   return (
     <div className="space-y-6 px-4 pt-2 safe-top">
       <header className="space-y-1.5">
@@ -69,7 +92,7 @@ export default function HomePage() {
           <p className="text-[15px] text-secondary">Latest opportunities from the active catalog.</p>
         </div>
         <Suspense fallback={<JobsFeedSkeleton count={5} />}>
-          <HomeJobsFeed />
+          <HomeJobsFeed searchParams={searchParams} />
         </Suspense>
       </section>
     </div>

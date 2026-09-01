@@ -122,6 +122,14 @@ visual feed, infinite scroll, and job detail. See
 [`JOB_FEED_UI.md`](./JOB_FEED_UI.md). Phase 5C adds a shared company
 logo pipeline (admin CLI + self-hosted WebP). Discovery never runs on
 the user request path. See [`COMPANY_ASSETS.md`](./COMPANY_ASSETS.md).
+Phase 5D adds URL-persisted lexical search (`q`) and filters (work
+mode, employment type, location free-text, freshness age) over the
+fresh catalog. One canonical parser (`parseFeedFilters`) drives the
+server initial page render, `GET /api/jobs/feed`, the shared cache
+key, and the client URL builder. Debounce + AbortController prevent
+stale responses from overwriting newer ones; changing any filter
+invalidates the current cursor. See
+[`JOB_SEARCH_FILTERS.md`](./JOB_SEARCH_FILTERS.md).
 
 ## Normalized job model
 
