@@ -40,7 +40,20 @@ function mapRow(row: Record<string, unknown>): CompanyAssetRow {
 
 export async function listCompaniesForAssetRun(
   client: SupabaseClient,
-  input: { companyId?: string; limit: number; includeFailed: boolean; includeReady: boolean },
+  input: {
+    companyId?: string;
+    limit: number;
+    includeFailed: boolean;
+    includeReady: boolean;
+    /**
+     * Bulk selection excludes companies with no trusted domain by default.
+     * The pipeline cannot fetch a homepage without one, so processing them
+     * only wastes a lookup and converts a benign `pending` row into
+     * `unresolved`. Explicit `--company=<uuid>` runs still bypass this
+     * gate so an operator can force-run a specific row.
+     */
+    requireTrustedDomain?: boolean;
+  },
 ): Promise<CompanyAssetRow[]> {
   let query = client
     .from('companies')
@@ -50,10 +63,16 @@ export async function listCompaniesForAssetRun(
 
   if (input.companyId) {
     query = query.eq('id', input.companyId);
-  } else if (!input.includeReady) {
-    const statuses: CompanyLogoStatus[] = ['pending'];
-    if (input.includeFailed) statuses.push('failed');
-    query = query.in('logo_status', statuses);
+  } else {
+    if (!input.includeReady) {
+      const statuses: CompanyLogoStatus[] = ['pending'];
+      if (input.includeFailed) statuses.push('failed');
+      query = query.in('logo_status', statuses);
+    }
+    if (input.requireTrustedDomain !== false) {
+      // .not('domain','is', null) — Supabase JS translates this to `domain=not.is.null`.
+      query = query.not('domain', 'is', null);
+    }
   }
 
   const { data, error } = await query;

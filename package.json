@@ -24,6 +24,9 @@
     "jobs:ashby": "node scripts/with-system-ca.mjs node scripts/jobs-ashby.mjs",
     "jobs:wwr": "node scripts/with-system-ca.mjs node scripts/jobs-wwr.mjs",
     "jobs:cleanup": "node scripts/with-system-ca.mjs node scripts/jobs-cleanup.mjs",
+    "jobs:sync": "node scripts/with-system-ca.mjs node scripts/jobs-sync.mjs",
+    "jobs:sources:verify": "node scripts/with-system-ca.mjs node scripts/jobs-sources-verify.mjs",
+    "jobs:sources:audit": "node scripts/with-system-ca.mjs node scripts/jobs-sources-audit.mjs",
     "companies:assets": "node scripts/with-system-ca.mjs node scripts/companies-assets.mjs",
     "icons": "node scripts/generate-icons.mjs"
   },

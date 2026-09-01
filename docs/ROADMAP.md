@@ -121,9 +121,23 @@ Email + password only (no OAuth / magic-link-only / phone):
   until Phase 5D is live-verified. See
   [`JOB_SEARCH_FILTERS.md`](./JOB_SEARCH_FILTERS.md).
 
-### 5E — Source registry expansion
+### 5E — Source registry expansion *(code complete; 0014 not applied)*
 
-- Not started. No cron. Manual sync remains.
+- `public.job_sources` is the authoritative source-of-truth registry.
+  `validateSourceConfig` refuses unsupported providers, malformed
+  identifiers, or direct sources without a canonical company binding.
+- New admin CLIs: `pnpm jobs:sources:verify` (READ-ONLY provider probe),
+  `pnpm jobs:sources:audit [--coverage]` (registry health + catalog
+  coverage report), `pnpm jobs:sync [--apply]` (multi-source ingestion,
+  dry-run default, bounded concurrency, failure-isolated).
+- Migration [`0014_source_registry_expansion.sql`](../supabase/migrations/0014_source_registry_expansion.sql)
+  is a narrow legacy repair only (unresolved-domain-null → pending).
+  No new seeds — see [`JOB_SOURCE_REGISTRY_CANDIDATES.md`](./JOB_SOURCE_REGISTRY_CANDIDATES.md).
+- `companies:assets` bulk selection now excludes domain-null rows;
+  explicit `--company=<uuid>` still bypasses the gate.
+- Phase 5D search carryover fix: `%%`, `**`, `__`, `\` etc. can no
+  longer become `ILIKE '%%'` — parser gate + repository defense in depth.
+- See [`JOB_SOURCE_REGISTRY.md`](./JOB_SOURCE_REGISTRY.md).
 
 ## Phase 6 — Matching engine
 

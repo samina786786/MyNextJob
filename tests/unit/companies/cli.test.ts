@@ -86,15 +86,20 @@ describe('companies:assets CLI', () => {
     expect(writes).toHaveLength(0);
   });
 
-  it('marks domain-null companies unresolved', async () => {
+  it('skips domain-null companies without flipping their logo_status (Phase 5E hardening)', async () => {
+    // Previously the pipeline wrote `logo_status='unresolved'` for any
+    // domain-null row it encountered, even though no fetch was ever
+    // attempted. `unresolved` should only mean "we tried and could not
+    // find a suitable icon". Domain-null rows now return `skipped` and
+    // the persist layer leaves the row alone.
     const { client, writes } = writeTrackingClient();
     const results = await runCompanyAssetPipeline(
       client,
       { apply: true, force: false, retryFailed: false, limit: 10, concurrency: 2 },
       { list: async () => [company({ domain: null, name: 'Toptal' })] },
     );
-    expect(results[0]?.outcome).toMatchObject({ status: 'unresolved' });
-    expect(writes[0]).toMatchObject({ logo_status: 'unresolved', logo_storage_path: null });
+    expect(results[0]?.outcome.status).toBe('skipped');
+    expect(writes).toHaveLength(0);
   });
 
   it('marks network failure as failed', async () => {

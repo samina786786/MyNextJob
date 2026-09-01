@@ -131,6 +131,14 @@ stale responses from overwriting newer ones; changing any filter
 invalidates the current cursor. See
 [`JOB_SEARCH_FILTERS.md`](./JOB_SEARCH_FILTERS.md).
 
+Phase 5E treats `public.job_sources` as the authoritative source
+registry and adds admin CLIs on top of it: `jobs:sources:verify`
+(READ-ONLY provider probe), `jobs:sources:audit [--coverage]`
+(registry health + catalog coverage), `jobs:sync [--apply]`
+(multi-source ingestion, dry-run default, bounded concurrency,
+failure-isolated, delegates to the Phase 3 `syncJobSource`). No new
+schema. See [`JOB_SOURCE_REGISTRY.md`](./JOB_SOURCE_REGISTRY.md).
+
 ## Normalized job model
 
 `NormalizedJobInput` is the adapter contract. Canonical rows in `jobs`

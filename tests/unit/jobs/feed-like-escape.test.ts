@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { escapePostgrestLikeSubstring } from '@/lib/jobs/feed/supabase-feed';
+import { escapePostgrestLikeSubstring } from '@/lib/jobs/feed/filters';
 
 /**
  * The helper collapses every SQL-LIKE metacharacter (`%`, `_`, `\`) and

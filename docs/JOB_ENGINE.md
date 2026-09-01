@@ -280,3 +280,21 @@ pnpm jobs:wwr --dry-run
 - Workday / LinkedIn / Naukri adapters
 - Cron, queues, job feed UI, matching, applications, AI
 - Showing ingested jobs to signed-in users on `/home`
+
+## Multi-source orchestration (Phase 5E)
+
+Phase 5E adds a thin admin orchestrator around this engine:
+`pnpm jobs:sync` iterates enabled + not-under-backoff `job_sources` rows
+and delegates each source to `syncJobSource`. Every existing engine
+invariant is preserved:
+
+- `snapshotComplete=false` (partial or capped) contributes zero
+  lifecycle misses.
+- Per-source `error_count` / `next_sync_at` continue to feed
+  `nextSyncDelayMinutes`.
+- One source failure never aborts the run — the orchestrator catches
+  the per-source error and continues to the next source.
+- Dry-run is the default; `--apply` is required to persist.
+- Bounded worker pool (default 3, max 5) prevents request storms.
+
+See [`JOB_SOURCE_REGISTRY.md`](./JOB_SOURCE_REGISTRY.md).

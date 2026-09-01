@@ -44,6 +44,17 @@ empty lists, no query, no location) are omitted from the URL.
 Unknown params are silently ignored. Invalid values fall back to
 defaults — the URL is user input; the parser never throws.
 
+**Empty-after-escape gate (Phase 5E hardening).** `q` and `location`
+are ALSO gated on the LIKE-sanitized stem: if every character is a SQL
+LIKE / PostgREST metacharacter (`%%`, `%_`, `**`, `__`, `\`, …) the
+parser returns `null` so `q` / `location` are dropped from the
+canonical filter object entirely — no `ILIKE '%%'` predicate is ever
+emitted, no company preflight runs, and the canonical URL never
+carries the junk parameter. The repository re-checks the sanitized
+stem as defense-in-depth: if a caller ever hands it a
+metacharacter-only value directly, it forces a zero-row result via
+`id IS NULL` rather than a match-all.
+
 ## What is searched
 
 | Field | Matched by `q`? | Notes |

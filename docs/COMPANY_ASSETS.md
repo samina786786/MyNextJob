@@ -111,6 +111,16 @@ pnpm companies:assets --apply --company=<uuid> --force --retry-failed --limit=20
 
 Concurrency is 4 (max 5). Ready companies are skipped unless `--force`.
 
+**Bulk selection (Phase 5E hardening).** By default the bulk run
+excludes companies with `domain IS NULL` — logo discovery cannot fetch
+anything without a trusted domain, and processing such rows only
+converts them from `pending` into `unresolved` without ever making a
+network attempt. `--company=<uuid>` explicitly bypasses this gate so an
+operator can force-run a specific row. If a domain-null row does slip
+through, `resolveCompanyAsset` returns `skipped` and the persist layer
+leaves the row's status alone (0014 also repairs any legacy rows that
+were incorrectly flipped to `unresolved` by the pre-fix bulk run).
+
 The CLI cannot invalidate a deployed Next Data Cache. Feed/detail use the
 `company-assets` cache tag plus the existing `jobsFresh` TTL. Phase 10 can
 connect enrichment completion to protected invalidation.

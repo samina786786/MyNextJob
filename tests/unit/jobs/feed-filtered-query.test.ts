@@ -60,6 +60,10 @@ function makeClient(companyIds: string[] = []) {
       calls.push({ table, op: 'ilike', args: [col, pattern] });
       return api;
     };
+    api.is = (col: string, value: null | boolean) => {
+      calls.push({ table, op: 'is', args: [col, value] });
+      return api;
+    };
     // The primary jobs query and the companies preflight are both awaited
     // after their terminal chain call. Resolve with 0 rows for jobs and
     // with the injected id list for companies.

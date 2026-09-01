@@ -102,7 +102,14 @@ Before every future task:
   pilot is approved.
 - Phase 5D (search & filters) is implemented in code. Migration 0013
   (`0013_job_search_filters.sql`) adds `pg_trgm` and trigram indexes;
-  **do not apply** until Phase 5D is live-verified. Do not add matching,
+  **do not apply** until Phase 5D is live-verified.
+- Phase 5E (source registry expansion) is implemented in code. Migration
+  0014 (`0014_source_registry_expansion.sql`) contains a narrow legacy
+  repair only — no new sources are seeded because candidate verification
+  requires network access this environment does not have. The verify /
+  audit / sync CLIs (`jobs:sources:verify`, `jobs:sources:audit`,
+  `jobs:sync`) are safe to run against configured environments. **Do not
+  apply 0014** until Phase 5E is live-verified. Do not add matching,
   notifications, application tracking, cron, or AI unless a later phase
   asks for it.
 - Phases: 0 Foundation · 1 Auth · 2 Profile+Resume · 3 Job Engine ·
@@ -354,6 +361,48 @@ Before every future task:
 - Migration `0013_job_search_filters.sql` (pg_trgm + trigram GIN indexes)
   is written but **not applied** until Phase 5D is live-verified.
 - See [`docs/JOB_SEARCH_FILTERS.md`](docs/JOB_SEARCH_FILTERS.md).
+
+## Source registry (Phase 5E invariants)
+
+- `public.job_sources` is the **authoritative** source registry. Runtime
+  reads job_sources; there is no second JSON/static registry.
+- Registry rows store **provider identifiers**, never arbitrary fetch
+  URLs. Provider adapters own fixed hosts (`boards-api.greenhouse.io`,
+  `api.lever.co` / `api.eu.lever.co`, `api.ashbyhq.com`,
+  `weworkremotely.com`).
+- Direct-employer sources (`greenhouse` / `lever` / `ashby`) bind
+  explicitly to a canonical `companies.id`. Sources without a company
+  binding are refused by `validateSourceConfig`.
+- Registry does NOT fuzzy-match company names. Similar names remain
+  distinct rows.
+- WWR remains one global aggregator source with `company_id = NULL`.
+  There is no additional WWR source per posting.
+- Every proposed direct source is **verified live** before it enters a
+  migration seed. If verification cannot happen, the candidate lives in
+  `docs/JOB_SOURCE_REGISTRY_CANDIDATES.md` marked UNVERIFIED and stays
+  out of the applied SQL.
+- Company `domain` is trusted identity data — never guessed from a
+  company name. NULL → verified is allowed; non-null → different domain
+  requires manual review.
+- Domain-null companies stay `logo_status = 'pending'`. Bulk logo runs
+  select only companies with a trusted domain by default (`--company`
+  bypasses the gate for explicit operator control).
+- Source sync is admin-only, never user-triggered. The browser never
+  fetches Greenhouse / Lever / Ashby / WWR at any time.
+- `pnpm jobs:sync` is dry-run by default. `--apply` is required to
+  persist. One source failure never aborts the run.
+- Multi-source ingestion concurrency is bounded (default 3, max 5).
+- Only genuinely COMPLETE snapshots may increment missing-job lifecycle
+  counters. Partial/failed sources contribute zero misses.
+- Stale admission (`staleSkipped`, >30 days) runs before company
+  creation and posting persistence — for every source.
+- Search input consisting only of SQL LIKE / PostgREST metacharacters
+  (`%%`, `%_`, `**`, `__`, `\`, …) must NEVER become `ILIKE '%%'`. The
+  parser drops such input; the repository forces `id IS NULL` (zero
+  rows) as defense in depth.
+- Phase 5E does not introduce cron. Scheduling stays deferred to
+  Phase 10.
+- See [`docs/JOB_SOURCE_REGISTRY.md`](docs/JOB_SOURCE_REGISTRY.md).
 
 ## When in doubt
 

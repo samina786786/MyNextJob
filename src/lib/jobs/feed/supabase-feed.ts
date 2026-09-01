@@ -11,6 +11,7 @@ import {
 import {
   DEFAULT_AGE_DAYS,
   EMPTY_FEED_FILTERS,
+  escapePostgrestLikeSubstring,
   hasNonQueryFilters,
   type FeedFilters,
 } from '@/lib/jobs/feed/filters';
@@ -44,43 +45,19 @@ const FEED_SELECT_WITH_LOGO = [...FEED_COLUMNS, COMPANY_FEED_EMBED_WITH_LOGO].jo
 const FEED_SELECT_NAME_ONLY = [...FEED_COLUMNS, COMPANY_FEED_EMBED_NAME_ONLY].join(',');
 
 /**
- * Two layers of grammar sit between a user's search string and the row:
+ * PostgREST OR-grammar and SQL LIKE-grammar metacharacters are both
+ * neutralized in `escapePostgrestLikeSubstring` (defined in
+ * `@/lib/jobs/feed/filters` so the same rule runs on both the URL parser
+ * and the repository).
  *
- *   1. PostgREST URL grammar. In `.or('a.ilike.pat,b.ilike.pat')` the
- *      comma separates operands and `(` / `)` group `and(…)` / `not(…)`.
- *      Inside a PostgREST value, `*` is the URL-safe alias for `%`.
- *   2. SQL LIKE / ILIKE grammar. `%` matches any run of characters, `_`
- *      matches exactly one, and `\` is the default escape character in
- *      PostgreSQL.
- *
- * PostgREST does NOT strip `%` / `_` — a raw `%` in the pattern reaches
- * PostgreSQL as a SQL wildcard, so user input like `50%` would silently
- * match "50 anything". Similarly `_data` would match `Xdata`, and `\` in
- * user input would be interpreted as an escape character by the SQL
- * engine.
- *
- * Rather than emitting `LIKE ... ESCAPE '\'` — which PostgREST does not
- * currently expose — we normalize every user-controlled LIKE
- * metacharacter to a single space. `%foo%bar%` becomes ` foo bar `,
- * which after trimming and space collapsing is the pattern `*foo bar*`.
- * That means:
- *   * `%` / `_` / `\` never act as wildcards
- *   * `,` / `(` / `)` cannot widen the OR grammar
- *   * `*` cannot be smuggled in as an alternate wildcard
- * Unicode letters, digits, dashes, quotes, and every other non-listed
- * character pass through untouched. Behaviour is deterministic — the
- * same input string always produces the same LIKE substring pattern.
+ * `safeIlikeSubstring` returns `null` when the sanitized stem is empty
+ * — the caller must then emit no ILIKE predicate and fall back to a
+ * zero-match sentinel instead of `ILIKE '%%'`, which would silently
+ * match the entire catalog.
  */
-const LIKE_UNSAFE = /[%_\\,()*]/g;
-const WHITESPACE_COLLAPSE = /\s+/g;
-
-/** Exported for direct unit tests of the escape contract. */
-export function escapePostgrestLikeSubstring(value: string): string {
-  return value.replace(LIKE_UNSAFE, ' ').replace(WHITESPACE_COLLAPSE, ' ').trim();
-}
-
-function ilikeSubstring(value: string): string {
+function safeIlikeSubstring(value: string): string | null {
   const escaped = escapePostgrestLikeSubstring(value);
+  if (escaped.length === 0) return null;
   return `*${escaped}*`;
 }
 
@@ -116,8 +93,10 @@ async function resolveCompanyIdsForQuery(
   client: SupabaseClient,
   q: string,
 ): Promise<string[]> {
-  // The preflight also uses ILIKE, so LIKE-metacharacters ('%', '_') must be
-  // neutralized the same way as in the main jobs query.
+  // Defense-in-depth: the parser is expected to gate this out via
+  // normalizeSearchQuery, but if a caller ever hands us a metacharacter-
+  // only string we must not preflight against `ILIKE '%%'` (which would
+  // return every company row up to the limit).
   const escaped = escapePostgrestLikeSubstring(q);
   if (!escaped) return [];
   const { data, error } = await client
@@ -239,6 +218,7 @@ type FilterInput = {
 function applyFilters<Q extends {
   in: (col: string, values: readonly string[]) => Q;
   or: (expr: string) => Q;
+  is: (col: string, value: null | boolean) => Q;
 }>(query: Q, input: FilterInput): Q {
   let q: Q = query;
 
@@ -250,28 +230,43 @@ function applyFilters<Q extends {
   }
 
   // Location: match any of the three text fields with a case-insensitive
-  // substring. Escaping keeps user input from breaking the OR expression.
+  // substring. Sanitize first — if the pattern collapses to empty (the
+  // user typed only metacharacters like `%%`), do not emit an OR that
+  // reduces to `ILIKE '%%'` on all three columns. Force zero results
+  // instead: an `id IS NULL` predicate always matches nothing and is
+  // preferable to silently dropping the filter and returning the whole
+  // catalog.
   if (input.filters.location) {
-    const pattern = ilikeSubstring(input.filters.location);
-    q = q.or(
-      [
-        `location_text.ilike.${pattern}`,
-        `city.ilike.${pattern}`,
-        `country.ilike.${pattern}`,
-      ].join(','),
-    );
+    const pattern = safeIlikeSubstring(input.filters.location);
+    if (pattern === null) {
+      q = q.is('id', null);
+    } else {
+      q = q.or(
+        [
+          `location_text.ilike.${pattern}`,
+          `city.ilike.${pattern}`,
+          `country.ilike.${pattern}`,
+        ].join(','),
+      );
+    }
   }
 
   // Text search: match title OR any company_id resolved from the company
-  // preflight. If neither leg would match anything, filter to zero rows so
-  // the empty state is returned.
+  // preflight. Same empty-pattern gate applies — if the sanitized title
+  // stem is empty AND no companies matched the preflight, produce a
+  // deterministic zero-row result rather than an accidental match-all.
   if (input.filters.q) {
-    const titlePattern = ilikeSubstring(input.filters.q);
-    const legs: string[] = [`title.ilike.${titlePattern}`];
+    const titlePattern = safeIlikeSubstring(input.filters.q);
+    const legs: string[] = [];
+    if (titlePattern !== null) legs.push(`title.ilike.${titlePattern}`);
     if (input.companyIds.length > 0) {
       legs.push(`company_id.in.(${input.companyIds.join(',')})`);
     }
-    q = q.or(legs.join(','));
+    if (legs.length === 0) {
+      q = q.is('id', null);
+    } else {
+      q = q.or(legs.join(','));
+    }
   }
 
   if (input.cursor) {

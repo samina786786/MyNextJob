@@ -87,10 +87,19 @@ export async function resolveCompanyAsset(
   try {
     domain = normalizeDomain(company.domain);
   } catch {
+    // A malformed/untrustworthy domain string is a real signal — mark
+    // the row unresolved so it does not churn on every bulk run.
     return { status: 'unresolved', reason: 'domain is not trustworthy' };
   }
-  if (!domain) return { status: 'unresolved', reason: 'no trusted domain' };
+  // A NULL domain is a *no attempt made* condition. Keep the row in
+  // whatever state it was (typically `pending`) — we never tried to
+  // fetch anything, so overwriting to `unresolved` would poison the
+  // meaning of that status. Return `skipped` so persistOutcome leaves
+  // the row alone.
+  if (!domain) return { status: 'skipped', reason: 'no trusted domain (row unchanged)' };
   if (isIP(domain)) {
+    // A literal-IP company domain is definitely not a legitimate logo
+    // source; record the attempt as unresolved.
     return { status: 'unresolved', reason: 'literal IP domains are not used for logos' };
   }
 

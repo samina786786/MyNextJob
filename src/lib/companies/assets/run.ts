@@ -119,6 +119,10 @@ export async function runCompanyAssetPipeline(
     limit: options.limit,
     includeFailed: options.retryFailed || options.force,
     includeReady: options.force,
+    // Bulk selection excludes companies without a trusted domain — logos
+    // cannot be discovered without one, and processing them just churns
+    // the row into `unresolved`. `--company=<uuid>` is unaffected.
+    requireTrustedDomain: !options.companyId,
   });
 
   return mapPool(companies, options.concurrency, async (company) => {

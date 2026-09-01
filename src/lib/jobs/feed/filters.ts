@@ -52,22 +52,64 @@ export const EMPTY_FEED_FILTERS: FeedFilters = {
 
 const WHITESPACE_RUN = /\s+/g;
 const CONTROL_CHAR = /[\x00-\x1f\x7f]/g;
+/**
+ * SQL LIKE and PostgREST OR-grammar metacharacters. Neutralized because
+ * they cannot be safely embedded in `ILIKE '%…%'` filters without either
+ * silently widening the match (`%`/`_`) or breaking the `.or(...)`
+ * expression (`,` / `(` / `)`). `*` is PostgREST's URL alias for `%`
+ * and `\` is PostgreSQL's default LIKE escape character.
+ */
+const LIKE_UNSAFE = /[%_\\,()*]/g;
 
-/** Trim, collapse internal whitespace, strip control characters, cap length. */
+/** Exported so `supabase-feed.ts` shares the exact same escape contract. */
+export function escapePostgrestLikeSubstring(value: string): string {
+  return value.replace(LIKE_UNSAFE, ' ').replace(WHITESPACE_RUN, ' ').trim();
+}
+
+/**
+ * Normalize a user search query into the canonical `q` value. Returns
+ * `null` when the input carries no legitimate signal after sanitization
+ * — either because it was empty, or because every character was a
+ * SQL LIKE / PostgREST metacharacter that we had to strip (`%%`, `**`,
+ * `__`, `\`, etc.). A `null` result means the caller must:
+ *
+ *   * emit no `ILIKE` predicate,
+ *   * skip the company-name preflight,
+ *   * omit `q` from the canonical URL,
+ *   * refuse to hash a garbage cache key.
+ *
+ * A short empty pattern MUST NEVER become `ILIKE '%%'` — that would
+ * accidentally match the entire catalog.
+ *
+ * Legitimate searches with punctuation such as `C++`, `.NET`, `Node.js`,
+ * `React Native`, `São Paulo`, `東京`, `---` are preserved unchanged
+ * because none of them contain the LIKE / OR metacharacters.
+ */
 export function normalizeSearchQuery(input: string | null | undefined): string | null {
   if (!input) return null;
   const cleaned = input.replace(CONTROL_CHAR, ' ').replace(WHITESPACE_RUN, ' ').trim();
   if (cleaned.length === 0) return null;
   const clipped = cleaned.slice(0, SEARCH_QUERY_MAX_LENGTH);
   if (clipped.length < SEARCH_QUERY_MIN_LENGTH) return null;
+  // Empty-after-LIKE-escape gate: block queries whose entire content is
+  // SQL LIKE / PostgREST metacharacters.
+  if (escapePostgrestLikeSubstring(clipped).length === 0) return null;
   return clipped;
 }
 
+/**
+ * Same empty-after-escape gate applies to the free-text location filter.
+ * A location composed solely of metacharacters silently sanitizes to an
+ * empty pattern; treating it as unset produces an unfiltered feed, which
+ * is the safer default than an accidental match-all.
+ */
 export function normalizeLocation(input: string | null | undefined): string | null {
   if (!input) return null;
   const cleaned = input.replace(CONTROL_CHAR, ' ').replace(WHITESPACE_RUN, ' ').trim();
   if (cleaned.length === 0) return null;
-  return cleaned.slice(0, LOCATION_MAX_LENGTH);
+  const clipped = cleaned.slice(0, LOCATION_MAX_LENGTH);
+  if (escapePostgrestLikeSubstring(clipped).length === 0) return null;
+  return clipped;
 }
 
 function parseSet<T extends string>(

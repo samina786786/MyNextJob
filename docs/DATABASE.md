@@ -42,7 +42,15 @@ composite `(remote_type, freshness_at DESC, id DESC) WHERE status='open'`
 for the work-mode filtered feed. Indexes are on the raw columns
 because PostgREST emits `col ILIKE '%value%'` on the raw column, and
 `gin_trgm_ops` supports both `LIKE` and `ILIKE` directly on the
-indexed column. No new columns; no new SELECT grants. Do not apply 0011 or 0013 automatically. Review
+indexed column. No new columns; no new SELECT grants.
+Phase 5E adds
+[`0014_source_registry_expansion.sql`](../supabase/migrations/0014_source_registry_expansion.sql)
+(**not applied**): a narrowly-scoped legacy repair that returns
+`companies` rows with `logo_status = 'unresolved' AND domain IS NULL AND
+logo_storage_path IS NULL` back to `logo_status = 'pending'`. Those
+rows were flipped incorrectly by the pre-fix bulk assets CLI. No
+schema changes — `job_sources` already exposes every field the Phase 5E
+orchestrator needs. Do not apply 0011 or 0013 automatically. Review
 each before applying. See [`JOB_ENGINE.md`](./JOB_ENGINE.md),
 [`JOB_SEARCH_FILTERS.md`](./JOB_SEARCH_FILTERS.md), and the Phase 4
 source docs.
