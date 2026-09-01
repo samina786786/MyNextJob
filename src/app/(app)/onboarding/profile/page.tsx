@@ -3,11 +3,23 @@ import { requireAuth } from '@/lib/auth/session';
 import { gateOnboardingPage } from '@/lib/onboarding/gate';
 import { loadDefaultResume, loadResumeSkillIds, loadSkillsCatalog } from '@/lib/onboarding/queries';
 import { ProfileReviewForm } from '@/features/onboarding/components/ProfileReviewForm';
+import { RouteSuspense } from '@/components/shell/RouteSuspense';
 
 export const metadata: Metadata = { title: 'Review profile' };
-export const runtime = 'nodejs';
 
-export default async function OnboardingProfilePage({
+export default function OnboardingProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ replace?: string }>;
+}) {
+  return (
+    <RouteSuspense>
+      <OnboardingProfileContent searchParams={searchParams} />
+    </RouteSuspense>
+  );
+}
+
+async function OnboardingProfileContent({
   searchParams,
 }: {
   searchParams: Promise<{ replace?: string }>;

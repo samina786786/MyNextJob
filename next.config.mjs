@@ -12,6 +12,18 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  /**
+   * Shared catalog data uses `"use cache"` + `cacheLife('jobsFresh')`.
+   * Authenticated pages stay request-specific (cookies / getClaims).
+   */
+  cacheComponents: true,
+  cacheLife: {
+    jobsFresh: {
+      stale: 60,
+      revalidate: 60,
+      expire: 600,
+    },
+  },
   serverExternalPackages: ['unpdf', 'mammoth', 'sanitize-html'],
   images: {
     remotePatterns: [

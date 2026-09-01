@@ -3,15 +3,26 @@ import { redirectIfAuthenticated } from '@/lib/auth/session';
 import { sanitizeNext } from '@/features/auth/redirects';
 import { AuthCard } from '@/features/auth/components/AuthCard';
 import { SignInForm } from '@/features/auth/components/SignInForm';
-
-export const dynamic = 'force-dynamic';
+import { RouteSuspense } from '@/components/shell/RouteSuspense';
 
 export const metadata: Metadata = {
   title: 'Sign in',
   robots: { index: false, follow: false },
 };
 
-export default async function SignInPage({
+export default function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  return (
+    <RouteSuspense>
+      <SignInContent searchParams={searchParams} />
+    </RouteSuspense>
+  );
+}
+
+async function SignInContent({
   searchParams,
 }: {
   searchParams: Promise<{ next?: string }>;

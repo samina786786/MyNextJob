@@ -3,11 +3,23 @@ import { requireAuth } from '@/lib/auth/session';
 import { gateOnboardingPage } from '@/lib/onboarding/gate';
 import { loadJobPreferences } from '@/lib/onboarding/queries';
 import { PreferencesForm } from '@/features/onboarding/components/PreferencesForm';
+import { RouteSuspense } from '@/components/shell/RouteSuspense';
 
 export const metadata: Metadata = { title: 'Job preferences' };
-export const runtime = 'nodejs';
 
-export default async function OnboardingPreferencesPage({
+export default function OnboardingPreferencesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ edit?: string }>;
+}) {
+  return (
+    <RouteSuspense>
+      <OnboardingPreferencesContent searchParams={searchParams} />
+    </RouteSuspense>
+  );
+}
+
+async function OnboardingPreferencesContent({
   searchParams,
 }: {
   searchParams: Promise<{ edit?: string }>;

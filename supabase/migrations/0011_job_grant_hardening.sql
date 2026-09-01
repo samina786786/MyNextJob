@@ -1,28 +1,40 @@
 -- =============================================================================
--- Phase 5A — Client grant hardening (jobs + ingestion tables)
+-- Phase 5A — Client grant hardening
 -- =============================================================================
 -- Additive. Does NOT edit 0010.
 -- Do not apply automatically.
 --
--- History:
---   Supabase table create left ALL-style leftovers on client roles
---   (TRUNCATE / REFERENCES / TRIGGER / MAINTAIN).
---   0003 granted authenticated SELECT on jobs and job_sources.
---   0005 revoked INSERT/UPDATE/DELETE from client roles on those catalogs
---   and REVOKE ALL on job_source_postings / source_sync_runs.
---   0010 revoked table-level SELECT on jobs and granted column-level
---   SELECT to authenticated only.
---   Leftover Dxtm (and column REFERENCES) remained on jobs / job_sources.
+-- Why leftovers exist:
+--   ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public currently
+--   grants TRUNCATE/REFERENCES/TRIGGER/MAINTAIN (Dxtm) to anon,
+--   authenticated, and service_role on every new table. CREATE TABLE
+--   therefore stamps those privileges even when later GRANT/REVOKE only
+--   mention SELECT/INSERT/UPDATE/DELETE. 0005 stripped DML from catalogs
+--   and REVOKE ALL on ingestion tables; 0010 stripped table SELECT on
+--   jobs. Dxtm remained. information_schema often omits MAINTAIN; it is
+--   visible on pg_class.relacl as "m".
 --
--- Do not REVOKE ALL from authenticated on jobs — that would drop 0010
+-- ON ALL TABLES IN SCHEMA public affects only the named roles — not
+-- service_role. It does not revoke SELECT/INSERT/UPDATE/DELETE.
+-- Do not REVOKE ALL from authenticated on jobs — that drops 0010
 -- column-level SELECT.
 -- =============================================================================
 
--- jobs: strip unused table privileges from client roles. Keep 0010 columns.
-revoke insert, update, delete, truncate, references, trigger, maintain
-  on table public.jobs
+-- Existing tables: strip infrastructure privileges from browser roles.
+revoke truncate, references, trigger, maintain
+  on all tables in schema public
   from anon, authenticated, public;
 
+-- Future tables created by the migration role (postgres).
+alter default privileges for role postgres in schema public
+  revoke truncate, references, trigger, maintain on tables
+  from anon, authenticated, public;
+
+-- ---------------------------------------------------------------------------
+-- jobs: keep 0010 column-level SELECT. No anon access. No client DML.
+-- ---------------------------------------------------------------------------
+revoke insert, update, delete on table public.jobs
+  from anon, authenticated, public;
 revoke select on table public.jobs from anon, public;
 
 grant select (
@@ -58,16 +70,17 @@ grant select (
 revoke all on table public.job_source_postings from anon, authenticated, public;
 revoke all on table public.source_sync_runs from anon, authenticated, public;
 
--- job_sources: keep authenticated SELECT (0003/0005 catalog grant; no
--- current client query, but 5D attribution may read names). Strip unused
--- mutation/DDL leftovers. anon stays without SELECT.
-revoke insert, update, delete, truncate, references, trigger, maintain
-  on table public.job_sources
+-- job_sources: authenticated SELECT kept (0003/0005 catalog; 5D attribution).
+revoke insert, update, delete on table public.job_sources
   from anon, authenticated, public;
-
 revoke select on table public.job_sources from anon, public;
-
 grant select on table public.job_sources to authenticated;
+
+-- companies: authenticated SELECT kept (feed company name / 5C logos).
+revoke insert, update, delete on table public.companies
+  from anon, authenticated, public;
+revoke select on table public.companies from anon, public;
+grant select on table public.companies to authenticated;
 
 comment on table public.jobs is
   'Canonical job openings. Authenticated SELECT is column-limited (0010). Client roles have no INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN (0011).';

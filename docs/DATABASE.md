@@ -31,9 +31,9 @@ Phase 5A adds
 column-limited authenticated SELECT on `jobs`, and `service_role` DELETE
 for cleanup.
 [`0011_job_grant_hardening.sql`](../supabase/migrations/0011_job_grant_hardening.sql)
-strips leftover client TRUNCATE/REFERENCES/TRIGGER/MAINTAIN on `jobs`
-and `job_sources` without touching `0010`. Do not apply 0011
-automatically.
+revokes leftover client TRUNCATE/REFERENCES/TRIGGER/MAINTAIN on **all**
+current `public` tables and hardens `postgres` default privileges so new
+tables do not get those leftovers. Do not apply 0011 automatically.
 Review each before applying. See [`JOB_ENGINE.md`](./JOB_ENGINE.md) and
 the Phase 4 source docs.
 
@@ -42,8 +42,9 @@ read-mostly tables (companies, jobs, skills, job_skills, job_sources)
 are readable by any authenticated user; writes are reserved for
 server-side `service_role` code. After 0010, authenticated `jobs`
 SELECT is column-limited (no `raw_payload`, fingerprint, hashes, or
-source identity). After 0011, client roles also lose leftover
-TRUNCATE/REFERENCES/TRIGGER/MAINTAIN on `jobs` and `job_sources`.
+source identity). After 0011, client roles lose leftover
+TRUNCATE/REFERENCES/TRIGGER/MAINTAIN on every current `public` table
+(CRUD grants are unchanged). `companies` stays authenticated SELECT.
 `job_source_postings` and
 `source_sync_runs` are server-only (no authenticated GRANT). RLS bypass
 does not replace table GRANTs — 0005 grants `service_role` select/insert/update
@@ -51,18 +52,18 @@ on the engine tables; 0010 adds DELETE on `jobs` and `job_source_postings`.
 
 ## Privilege model (jobs catalog)
 
-| Role | `jobs` | `job_sources` | `job_source_postings` / `source_sync_runs` |
-| --- | --- | --- | --- |
-| `anon` | none | none | none |
-| `authenticated` | column-level SELECT only (0010 list) | table SELECT (0003/0005; kept) | none |
-| `service_role` | SELECT/INSERT/UPDATE/DELETE | SELECT/INSERT/UPDATE | postings: SELECT/INSERT/UPDATE/DELETE; sync runs: SELECT/INSERT/UPDATE |
+| Role | `jobs` | `job_sources` | `companies` | `job_source_postings` / `source_sync_runs` |
+| --- | --- | --- | --- | --- |
+| `anon` | none | none | none | none |
+| `authenticated` | column-level SELECT only (0010 list) | table SELECT | table SELECT | none |
+| `service_role` | SELECT/INSERT/UPDATE/DELETE | SELECT/INSERT/UPDATE | SELECT/INSERT/UPDATE | postings: SELECT/INSERT/UPDATE/DELETE; sync runs: SELECT/INSERT/UPDATE |
 
-Do not `REVOKE ALL` from `authenticated` on `jobs` — that drops column
-grants. Client roles must not have INSERT/UPDATE/DELETE/TRUNCATE/
-REFERENCES/TRIGGER/MAINTAIN on these tables. RLS policies are separate
-and were not changed in 0011. `companies` still has the same leftover
-TRUNCATE/REFERENCES/TRIGGER/MAINTAIN on client roles; that is outside
-this migration.
+0011 also revokes TRUNCATE/REFERENCES/TRIGGER/MAINTAIN from
+`anon`/`authenticated`/`PUBLIC` on **all** current `public` tables. User
+CRUD (`profiles`, `resumes`, `saved_jobs`, …) is not revoked.
+`ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public` stops new
+tables from receiving those four leftovers. Do not `REVOKE ALL` from
+`authenticated` on `jobs` — that drops column grants. RLS is unchanged.
 
 ## The tables in plain language
 

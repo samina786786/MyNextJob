@@ -6,6 +6,7 @@ import { ClayBadge } from '@/components/clay/ClayBadge';
 import { ClayCard } from '@/components/clay/ClayCard';
 import { DownloadResumeButton } from '@/features/onboarding/components/DownloadResumeButton';
 import { SignOutButton } from '@/features/auth/components/SignOutButton';
+import { RouteSuspense } from '@/components/shell/RouteSuspense';
 import { gateHomeOrProfile } from '@/lib/onboarding/gate';
 import {
   loadConfirmedSkillNames,
@@ -14,7 +15,6 @@ import {
 } from '@/lib/onboarding/queries';
 
 export const metadata: Metadata = { title: 'Profile' };
-export const runtime = 'nodejs';
 
 const WORK_MODE_LABEL: Record<string, string> = {
   remote: 'Remote',
@@ -30,7 +30,15 @@ function parseBadge(status: string) {
   return { tone: 'neutral' as const, label: 'Pending' };
 }
 
-export default async function ProfilePage() {
+export default function ProfilePage() {
+  return (
+    <RouteSuspense>
+      <ProfileContent />
+    </RouteSuspense>
+  );
+}
+
+async function ProfileContent() {
   const identity = await requireAuth('/profile');
   const snapshot = await gateHomeOrProfile(identity.userId);
   const [resume, skills, prefs] = await Promise.all([

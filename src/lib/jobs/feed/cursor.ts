@@ -1,7 +1,12 @@
 import { FeedCursorError } from '@/lib/jobs/errors';
 import { DEFAULT_FEED_PAGE_SIZE, MAX_FEED_PAGE_SIZE } from '@/lib/jobs/freshness';
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const JOB_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isJobId(value: string): boolean {
+  return JOB_ID_RE.test(value);
+}
 
 export type FeedCursor = {
   freshnessAt: Date;
@@ -31,7 +36,7 @@ export function decodeFeedCursor(raw: string): FeedCursor {
   const iso = decoded.slice(0, sep);
   const id = decoded.slice(sep + 1);
   const freshnessAt = new Date(iso);
-  if (Number.isNaN(freshnessAt.getTime()) || !UUID_RE.test(id)) {
+  if (Number.isNaN(freshnessAt.getTime()) || !isJobId(id)) {
     throw new FeedCursorError();
   }
   return { freshnessAt, id };

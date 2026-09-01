@@ -194,6 +194,66 @@
   border-radius: var(--radius-clay-md);
 }
 
+@utility feed-skeleton-reveal {
+  animation: feed-skeleton-reveal 200ms ease-out 200ms both;
+}
+
+@keyframes feed-skeleton-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.job-description {
+  color: var(--color-foreground);
+  font-size: 15px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.job-description p,
+.job-description ul,
+.job-description ol,
+.job-description blockquote {
+  margin: 0 0 0.85rem;
+}
+
+.job-description h2,
+.job-description h3,
+.job-description h4 {
+  color: var(--color-foreground);
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 1.1rem 0 0.5rem;
+}
+
+.job-description h2 {
+  font-size: 1.125rem;
+}
+
+.job-description h3,
+.job-description h4 {
+  font-size: 1rem;
+}
+
+.job-description ul,
+.job-description ol {
+  padding-left: 1.25rem;
+}
+
+.job-description a {
+  color: var(--color-primary-deep);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.job-description a:hover {
+  color: var(--color-primary);
+}
+
 /* Safe-area helpers for PWA installability on notched devices. */
 @utility safe-top {
   padding-top: max(1rem, env(safe-area-inset-top));

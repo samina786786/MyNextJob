@@ -9,6 +9,9 @@ describe('sanitizeNext', () => {
     expect(sanitizeNext('/search')).toBe('/search');
     expect(sanitizeNext('/onboarding/resume')).toBe('/onboarding/resume');
     expect(sanitizeNext('/onboarding/profile')).toBe('/onboarding/profile');
+    expect(sanitizeNext('/jobs/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee')).toBe(
+      '/jobs/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+    );
   });
 
   it('rejects external and protocol-relative URLs', () => {

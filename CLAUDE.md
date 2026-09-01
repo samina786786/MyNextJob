@@ -97,9 +97,9 @@ Before every future task:
 ## Scope control
 
 - Do **not** implement work from later phases unless explicitly instructed.
-- Phase 5A (feed foundation) is implemented. Do not add matching,
-  notifications, application UX, job-feed UI, cron, or AI unless a
-  later phase asks for it.
+- Phase 5B (production job feed UI) is implemented. Do not add matching,
+  notifications, application tracking, logos, search/filters, cron, or AI
+  unless a later phase asks for it.
 - Phases: 0 Foundation · 1 Auth · 2 Profile+Resume · 3 Job Engine ·
   4 Sources · 5 Discovery UI (5A feed foundation · 5B UI · 5C logos ·
   5D search · 5E source registry) · 6 Matching · 7 Applications ·
@@ -259,6 +259,31 @@ Before every future task:
 - Content-hash unchanged fast path is preferred.
 - No cron yet.
 - See [`docs/JOB_FEED_FOUNDATION.md`](docs/JOB_FEED_FOUNDATION.md).
+
+## Feed UI (Phase 5B invariants)
+
+- User scrolling never fetches Greenhouse, Lever, Ashby, or WWR. The
+  browser talks only to MyNextJob (`/home`, `/jobs/[id]`, `/api/jobs/feed`).
+- The first feed page is **server rendered** (~15 jobs in the HTML).
+  Do not load an empty home shell and then fetch page 1.
+- Page size 15, maximum 30. Cursor/keyset only. No OFFSET feed.
+- Prefetch the next page before the end (`IntersectionObserver` ~1000px)
+  and keep a real **Load more jobs** button.
+- Preserve already-rendered cards while the next page loads or fails.
+  No global spinner for feed pagination.
+- **Posted** means a real `published_at`. **Found** means `discovered_at`
+  fallback. Never label discovered time as Posted.
+- Shared catalog cache (`"use cache"` + `cacheLife('jobsFresh')`) contains
+  **zero** user-specific information (no cookies, claims, user id, profile).
+- Authenticated HTTP responses (`GET /api/jobs/feed`) are private
+  (`Cache-Control: private, no-store`). Do not publicly cache them.
+- One page query provides company names and batched source attribution.
+  No per-card DB or network waterfall. No logos until Phase 5C.
+- No match scores until Phase 6. No fake applicant counts.
+- No list virtualization without evidence it is needed.
+- CLI ingestion cannot invalidate the Next Data Cache. Short `jobsFresh`
+  TTL is the correctness fallback until Phase 10.
+- See [`docs/JOB_FEED_UI.md`](docs/JOB_FEED_UI.md).
 
 ## When in doubt
 

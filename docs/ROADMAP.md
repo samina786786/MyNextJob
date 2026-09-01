@@ -72,7 +72,7 @@ Email + password only (no OAuth / magic-link-only / phone):
 
 ## Phase 5 — Discovery UI
 
-### 5A — Feed data foundation *(0010 live; 0011 unapplied)*
+### 5A — Feed data foundation *(complete; 0010 and 0011 live)*
 
 - 30-day active catalog, `staleSkipped` admission, cleanup CLI.
 - Cursor/keyset feed repository (page 15 / max 30).
@@ -83,12 +83,13 @@ Email + password only (no OAuth / magic-link-only / phone):
 - Provider-neutral content-hash sync fast path.
 - See [`JOB_FEED_FOUNDATION.md`](./JOB_FEED_FOUNDATION.md).
 
-### 5B — Feed UI & infinite scroll
+### 5B — Feed UI & infinite scroll *(complete)*
 
-- Real home feed with filters, freshness, and skeletons.
-- Job detail page with clean reading typography (calmer clay).
-- Saved jobs.
-- Next.js `use cache` / `cacheLife` / `cacheTag` for the shared catalog.
+- Server-rendered first page of 15, keyset infinite scroll, Load more.
+- Shared `jobsFresh` catalog cache; authenticated HTTP stays private.
+- Mobile job cards, `/jobs/[id]`, Posted vs Found, WWR attribution.
+- No logos, search, matching, or saves.
+- See [`JOB_FEED_UI.md`](./JOB_FEED_UI.md).
 
 ### 5C — Company logos / assets
 

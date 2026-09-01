@@ -3,11 +3,23 @@ import { requireAuth } from '@/lib/auth/session';
 import { gateOnboardingPage } from '@/lib/onboarding/gate';
 import { loadDefaultResume } from '@/lib/onboarding/queries';
 import { ResumeUploader } from '@/features/onboarding/components/ResumeUploader';
+import { RouteSuspense } from '@/components/shell/RouteSuspense';
 
 export const metadata: Metadata = { title: 'Upload resume' };
-export const runtime = 'nodejs';
 
-export default async function OnboardingResumePage({
+export default function OnboardingResumePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ replace?: string }>;
+}) {
+  return (
+    <RouteSuspense>
+      <OnboardingResumeContent searchParams={searchParams} />
+    </RouteSuspense>
+  );
+}
+
+async function OnboardingResumeContent({
   searchParams,
 }: {
   searchParams: Promise<{ replace?: string }>;

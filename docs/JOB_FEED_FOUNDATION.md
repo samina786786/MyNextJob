@@ -3,7 +3,7 @@
 MyNextJob is **not a historical job archive**. The active catalog is a
 30-day freshness window. This phase is backend only: admission, cleanup,
 a feed read model, keyset pagination, and provider-neutral sync speed.
-There is no visual feed yet (Phase 5B).
+The visual feed is Phase 5B — see [`JOB_FEED_UI.md`](./JOB_FEED_UI.md).
 
 See also [`JOB_ENGINE.md`](./JOB_ENGINE.md).
 
@@ -139,17 +139,16 @@ Column-level `SELECT` on `jobs` for `authenticated` (0010). Hidden:
 
 `anon` has no `jobs` SELECT.
 
-0010 revoked table-level SELECT but left the historical ALL leftovers
-(`TRUNCATE`, `REFERENCES`, `TRIGGER`, and Postgres 17 `MAINTAIN`) on
-`anon` / `authenticated`. [`0011_job_grant_hardening.sql`](../supabase/migrations/0011_job_grant_hardening.sql)
-revokes those. It must not `REVOKE ALL` from `authenticated` on `jobs`
-or the column grants disappear.
+0011 revokes leftover TRUNCATE/REFERENCES/TRIGGER/MAINTAIN from
+`anon`/`authenticated`/`PUBLIC` on all current `public` tables (including
+`companies`) and hardens `postgres` default privileges. It must not
+`REVOKE ALL` from `authenticated` on `jobs` or the column grants
+disappear. User-owned CRUD grants are not revoked.
 
 `job_source_postings` and `source_sync_runs` stay server-only (0005
-`REVOKE ALL` from client roles; 0011 repeats it). `job_sources` keeps
-authenticated table SELECT from 0003/0005 (catalog / later attribution);
-0011 only strips unused mutation/DDL leftovers. `service_role` grants
-are unchanged. RLS is unchanged.
+`REVOKE ALL` from client roles; 0011 repeats it). `job_sources` and
+`companies` keep authenticated table SELECT. `service_role` grants are
+unchanged. RLS is unchanged.
 
 ## Sync fast path
 
@@ -169,8 +168,9 @@ configured `companyId`. No cron.
 ## Known limits
 
 - Live feed SQL and cleanup DELETE require 0010 (applied)
-- Grant leftovers on `jobs` / `job_sources` wait on 0011
+- Client Dxtm leftovers wait on 0011 (all public tables + postgres defaults)
 - `region` is not stored on `jobs`
 - Unchanged fast path still does not rewrite URLs when the hash matches
 - Orphan-company cleanup is deferred
-- Matching, search, logos, and feed UI are later subphases
+- Matching, search, and logos are later subphases (5C+)
+- Feed UI is Phase 5B — [`JOB_FEED_UI.md`](./JOB_FEED_UI.md)

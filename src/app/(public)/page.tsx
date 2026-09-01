@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { Search, Sparkles } from 'lucide-react';
 import { clayButton } from '@/components/clay/clayButtonStyles';
 import { ClayCard } from '@/components/clay/ClayCard';
@@ -8,14 +9,34 @@ import { FilterChipStrip } from '@/components/home/FilterChipStrip';
 import { SAMPLE_JOBS } from '@/features/jobs/sample-data';
 import { getAuthIdentity } from '@/lib/auth/session';
 
-export const dynamic = 'force-dynamic';
+async function LandingAuthActions() {
+  const identity = await getAuthIdentity();
+  if (identity) {
+    return (
+      <Link
+        href="/home"
+        className={`${clayButton({ variant: 'primary', size: 'lg', block: true })} col-span-2`}
+      >
+        Open MyNextJob
+      </Link>
+    );
+  }
+  return (
+    <>
+      <Link href="/sign-up" className={clayButton({ variant: 'primary', size: 'lg', block: true })}>
+        Get started
+      </Link>
+      <Link href="/sign-in" className={clayButton({ variant: 'secondary', size: 'lg', block: true })}>
+        Sign in
+      </Link>
+    </>
+  );
+}
 
 /**
  * Public landing. Sample cards are a design preview — not live jobs.
  */
-export default async function LandingPage() {
-  const identity = await getAuthIdentity();
-
+export default function LandingPage() {
   return (
     <div className="space-y-6 px-4 pt-2 safe-top">
       <header className="space-y-1.5">
@@ -31,23 +52,15 @@ export default async function LandingPage() {
       </header>
 
       <div className="grid grid-cols-2 gap-3">
-        {identity ? (
-          <Link
-            href="/home"
-            className={`${clayButton({ variant: 'primary', size: 'lg', block: true })} col-span-2`}
-          >
-            Open MyNextJob
-          </Link>
-        ) : (
-          <>
-            <Link href="/sign-up" className={clayButton({ variant: 'primary', size: 'lg', block: true })}>
+        <Suspense
+          fallback={
+            <Link href="/sign-up" className={`${clayButton({ variant: 'primary', size: 'lg', block: true })} col-span-2`}>
               Get started
             </Link>
-            <Link href="/sign-in" className={clayButton({ variant: 'secondary', size: 'lg', block: true })}>
-              Sign in
-            </Link>
-          </>
-        )}
+          }
+        >
+          <LandingAuthActions />
+        </Suspense>
       </div>
 
       <ClayCard depth="raised" radius="xl" padding="lg" className="flex items-center gap-4">

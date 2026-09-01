@@ -117,8 +117,9 @@ the first aggregator source. See
 
 Phase 5A adds the 30-day active catalog, `staleSkipped` admission, a
 keyset feed read model, and a content-hash sync fast path. See
-[`JOB_FEED_FOUNDATION.md`](./JOB_FEED_FOUNDATION.md). The visual feed is
-Phase 5B.
+[`JOB_FEED_FOUNDATION.md`](./JOB_FEED_FOUNDATION.md). Phase 5B is the
+visual feed, infinite scroll, and job detail. See
+[`JOB_FEED_UI.md`](./JOB_FEED_UI.md).
 
 ## Normalized job model
 

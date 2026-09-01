@@ -1,9 +1,15 @@
 import { requireAuth } from '@/lib/auth/session';
+import { RouteSuspense } from '@/components/shell/RouteSuspense';
 
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
-
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
+async function AppAuthGate({ children }: { children: React.ReactNode }) {
   await requireAuth('/home');
   return children;
+}
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <RouteSuspense>
+      <AppAuthGate>{children}</AppAuthGate>
+    </RouteSuspense>
+  );
 }

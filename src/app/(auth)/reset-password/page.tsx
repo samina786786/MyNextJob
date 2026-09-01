@@ -3,15 +3,22 @@ import Link from 'next/link';
 import { getAuthIdentity } from '@/lib/auth/session';
 import { AuthCard } from '@/features/auth/components/AuthCard';
 import { ResetPasswordForm } from '@/features/auth/components/ResetPasswordForm';
-
-export const dynamic = 'force-dynamic';
+import { RouteSuspense } from '@/components/shell/RouteSuspense';
 
 export const metadata: Metadata = {
   title: 'Set a new password',
   robots: { index: false, follow: false },
 };
 
-export default async function ResetPasswordPage() {
+export default function ResetPasswordPage() {
+  return (
+    <RouteSuspense>
+      <ResetPasswordContent />
+    </RouteSuspense>
+  );
+}
+
+async function ResetPasswordContent() {
   const identity = await getAuthIdentity();
 
   if (!identity) {
