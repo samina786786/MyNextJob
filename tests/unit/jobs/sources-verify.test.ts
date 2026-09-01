@@ -125,7 +125,7 @@ describe('verifyOne', () => {
     const outcome = await verifyOne(
       source({
         sourceType: 'we_work_remotely',
-        externalIdentifier: 'weworkremotely-all-jobs-rss',
+        externalIdentifier: 'weworkremotely-all',
         companyId: null,
       }),
       { fetchImpl },

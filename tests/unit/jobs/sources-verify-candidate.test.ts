@@ -136,7 +136,7 @@ describe('verifyCandidate — ad-hoc provider probing', () => {
     }) as unknown as typeof fetch;
     const outcome = await verifyCandidate({
       provider: 'we_work_remotely',
-      identifier: 'weworkremotely-all-jobs-rss',
+      identifier: 'weworkremotely-all',
       fetchImpl,
     });
     expect(outcome.status).toBe('invalid');

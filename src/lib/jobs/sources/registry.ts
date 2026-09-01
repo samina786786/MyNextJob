@@ -1,5 +1,6 @@
 import type { JobSourceRecord } from '@/lib/jobs/repository/types';
 import type { JobSourceProvider } from '@/lib/jobs/types';
+import { WWR_SOURCE_IDENTIFIER } from '@/lib/jobs/adapters/wwr-http';
 
 /**
  * Registry contract shared by the verify + sync CLIs.
@@ -37,7 +38,13 @@ export function isSupportedProvider(value: unknown): value is SupportedProvider 
 export const GREENHOUSE_TOKEN_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$/;
 export const LEVER_SITE_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$/;
 export const ASHBY_BOARD_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$/;
-export const WWR_ALL_JOBS_IDENTIFIER = 'weworkremotely-all-jobs-rss';
+/**
+ * WWR singleton identifier. Re-exported from the adapter's HTTP module
+ * (`WWR_SOURCE_IDENTIFIER = 'weworkremotely-all'` — see 0009) so the
+ * validator, the CLI, and the adapter share **one** canonical constant.
+ * Do not introduce a second WWR string.
+ */
+export const WWR_ALL_JOBS_IDENTIFIER: typeof WWR_SOURCE_IDENTIFIER = WWR_SOURCE_IDENTIFIER;
 
 export type SourceConfigIssue =
   | 'unsupported_provider'

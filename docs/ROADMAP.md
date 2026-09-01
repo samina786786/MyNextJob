@@ -121,7 +121,7 @@ Email + password only (no OAuth / magic-link-only / phone):
   until Phase 5D is live-verified. See
   [`JOB_SEARCH_FILTERS.md`](./JOB_SEARCH_FILTERS.md).
 
-### 5E — Source registry expansion *(code complete; 0014 not applied)*
+### 5E — Source registry expansion *(0014 applied; pending post-backoff idempotency reruns)*
 
 - `public.job_sources` is the authoritative source-of-truth registry.
   `validateSourceConfig` refuses unsupported providers, malformed

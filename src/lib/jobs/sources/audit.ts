@@ -84,7 +84,7 @@ export async function buildRegistryAudit(
 
   // Sanity read against the DB to prove the client is connected.
   const { error } = await client.from('job_sources').select('id', { head: true, count: 'exact' }).limit(1);
-  if (error) throw new PersistenceError(error.message);
+  if (error) throwCoverageError('registry audit preflight', error);
 
   return {
     totalSources: sources.length,
@@ -122,53 +122,115 @@ function classifyRole(title: string): string {
 }
 
 type JobRow = {
+  id: string;
   title: string | null;
   remote_type: string | null;
   employment_type: string | null;
   country: string | null;
   freshness_at: string | null;
-  discovered_at: string | null;
   company_id: string | null;
-  job_source_postings?: { job_sources: { source_type: string } | { source_type: string }[] | null }[];
 };
+
+/** Supabase / PostgREST caps a single response at ~1000 rows regardless of
+ *  the `.limit()` argument. Coverage MUST iterate the full catalog, so we
+ *  fetch card-level columns in 1000-row pages and stop when a page comes
+ *  back short or we cover the exact total from `head + count`. Descriptions
+ *  are deliberately never read. */
+const COVERAGE_PAGE_SIZE = 1000;
+
+/** Distinct from COVERAGE_PAGE_SIZE. A single `.in('col', values)` filter
+ *  encodes every UUID into the request URL — 150 UUIDs is ~6 KB, safely
+ *  under the typical Kong / PostgREST 8 KB request-line limit that
+ *  produces HTTP 400 "Bad Request" for oversized `.in(...)` follow-ups.
+ *  Row pagination stays at 1000; only the follow-up `.in()` chunking
+ *  shrinks here. */
+const IN_LIST_CHUNK_SIZE = 150;
+
+type SupabaseErrorLike = {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+};
+
+/** Rich error propagation so a coverage 400 no longer surfaces as bare
+ *  "Bad Request". Never logs authorization headers or secrets. */
+function throwCoverageError(label: string, error: SupabaseErrorLike): never {
+  const parts: string[] = [`${label} failed`];
+  if (error.code) parts.push(`code=${error.code}`);
+  if (error.message) parts.push(`message=${error.message}`);
+  if (error.details) parts.push(`details=${error.details}`);
+  if (error.hint) parts.push(`hint=${error.hint}`);
+  throw new PersistenceError(parts.join(' | '));
+}
+
+/**
+ * Preferred attribution provider — mirrors the product's `pickAttributionLabel`
+ * ordering so a canonical job is counted exactly once under the winning
+ * direct-employer ATS when both direct + aggregator evidence exists.
+ * Lower rank wins.
+ */
+const PROVIDER_RANK: Record<string, number> = {
+  greenhouse: 0,
+  lever: 1,
+  ashby: 2,
+  we_work_remotely: 50,
+  rss: 51,
+};
+
+function preferredProvider(providers: readonly string[]): string {
+  let best: string | null = null;
+  let bestRank = Number.POSITIVE_INFINITY;
+  for (const p of providers) {
+    const rank = PROVIDER_RANK[p] ?? 20;
+    if (rank < bestRank) {
+      bestRank = rank;
+      best = p;
+    }
+  }
+  return best ?? 'unknown';
+}
+
+async function fetchAllFreshJobsPaged(
+  client: SupabaseClient,
+  cutoffIso: string,
+): Promise<{ rows: JobRow[]; totalReported: number }> {
+  const rows: JobRow[] = [];
+  const { count, error: countErr } = await client
+    .from('jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'open')
+    .gte('freshness_at', cutoffIso);
+  if (countErr) throwCoverageError('coverage jobs exact-count', countErr);
+  const totalReported = typeof count === 'number' ? count : 0;
+
+  for (let offset = 0; ; offset += COVERAGE_PAGE_SIZE) {
+    const { data, error } = await client
+      .from('jobs')
+      .select('id, title, remote_type, employment_type, country, freshness_at, company_id')
+      .eq('status', 'open')
+      .gte('freshness_at', cutoffIso)
+      // Deterministic order so `range()` returns disjoint pages. The
+      // ordering does not need to match the feed's keyset; it just needs
+      // to be stable across paged requests.
+      .order('freshness_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(offset, offset + COVERAGE_PAGE_SIZE - 1);
+    if (error) throwCoverageError(`coverage jobs page offset=${offset}`, error);
+    const page = (data as JobRow[] | null) ?? [];
+    rows.push(...page);
+    if (page.length < COVERAGE_PAGE_SIZE) break;
+    // Belt-and-suspenders — never loop past what the head-count promised.
+    if (totalReported > 0 && rows.length >= totalReported) break;
+  }
+  return { rows, totalReported };
+}
 
 export async function buildCoverageReport(client: SupabaseClient): Promise<CoverageReport> {
   const now = new Date();
   const cutoff = catalogCutoff(now).toISOString();
-  const { data: jobs, error } = await client
-    .from('jobs')
-    .select(
-      'title, remote_type, employment_type, country, freshness_at, discovered_at, company_id',
-    )
-    .eq('status', 'open')
-    .gte('freshness_at', cutoff)
-    .limit(20_000);
-  if (error) throw new PersistenceError(error.message);
-  const jobRows = (jobs as JobRow[] | null) ?? [];
 
-  // Provider attribution is derived from job_source_postings + job_sources.
-  const jobIds = jobRows
-    .map((row) => (row as unknown as { id?: string }).id)
-    .filter((id): id is string => typeof id === 'string');
-  const byProvider: Record<string, number> = {};
-  if (jobIds.length > 0) {
-    // Fetch attribution in the same fashion the feed does.
-    const { data: postings, error: postErr } = await client
-      .from('job_source_postings')
-      .select('job_id, job_sources(source_type)')
-      .in('job_id', jobIds);
-    if (!postErr) {
-      const seen = new Set<string>();
-      type PostingRow = { job_id: string; job_sources: { source_type: string } | { source_type: string }[] | null };
-      for (const row of (postings as PostingRow[] | null) ?? []) {
-        if (seen.has(row.job_id)) continue;
-        seen.add(row.job_id);
-        const rel = Array.isArray(row.job_sources) ? row.job_sources[0] : row.job_sources;
-        const type = rel?.source_type ?? 'unknown';
-        byProvider[type] = (byProvider[type] ?? 0) + 1;
-      }
-    }
-  }
+  const { rows: jobRows, totalReported } = await fetchAllFreshJobsPaged(client, cutoff);
 
   const byWorkMode: Record<string, number> = {};
   const byEmploymentType: Record<string, number> = {};
@@ -176,6 +238,7 @@ export async function buildCoverageReport(client: SupabaseClient): Promise<Cover
   const roleFamiliesHeuristic: Record<string, number> = {};
   const byFreshness = { last24h: 0, last7d: 0, last14d: 0, last30d: 0 };
   const companiesFresh = new Set<string>();
+  const jobIdOrder: string[] = [];
   for (const row of jobRows) {
     const wm = row.remote_type ?? 'unknown';
     byWorkMode[wm] = (byWorkMode[wm] ?? 0) + 1;
@@ -195,17 +258,63 @@ export async function buildCoverageReport(client: SupabaseClient): Promise<Cover
       if (age <= 30 * day) byFreshness.last30d += 1;
     }
     if (row.company_id) companiesFresh.add(row.company_id);
+    jobIdOrder.push(row.id);
+  }
+
+  // Provider attribution — "fresh canonical jobs by preferred attribution
+  // provider". Each canonical job is counted exactly once under its
+  // winning provider, using the same direct-employer-over-aggregator
+  // precedence as the product's `pickAttributionLabel`. Follow-ups use
+  // IN_LIST_CHUNK_SIZE (not COVERAGE_PAGE_SIZE) — a 1000-UUID .in() list
+  // encodes to a ~37 KB URL and blows past Kong's request-line limit.
+  const byProvider: Record<string, number> = {};
+  if (jobIdOrder.length > 0) {
+    const providersByJob = new Map<string, string[]>();
+    for (let offset = 0; offset < jobIdOrder.length; offset += IN_LIST_CHUNK_SIZE) {
+      const chunk = jobIdOrder.slice(offset, offset + IN_LIST_CHUNK_SIZE);
+      const { data: postings, error: postErr } = await client
+        .from('job_source_postings')
+        .select('job_id, job_sources(source_type)')
+        .in('job_id', chunk);
+      if (postErr) {
+        throwCoverageError(
+          `coverage attribution chunk offset=${offset} size=${chunk.length}`,
+          postErr,
+        );
+      }
+      type PostingRow = { job_id: string; job_sources: { source_type: string } | { source_type: string }[] | null };
+      for (const row of (postings as PostingRow[] | null) ?? []) {
+        const rel = Array.isArray(row.job_sources) ? row.job_sources[0] : row.job_sources;
+        const type = rel?.source_type ?? 'unknown';
+        const list = providersByJob.get(row.job_id) ?? [];
+        list.push(type);
+        providersByJob.set(row.job_id, list);
+      }
+    }
+    for (const id of jobIdOrder) {
+      const providers = providersByJob.get(id) ?? [];
+      const winner = providers.length > 0 ? preferredProvider(providers) : 'unattributed';
+      byProvider[winner] = (byProvider[winner] ?? 0) + 1;
+    }
   }
 
   let companiesWithDomain = 0;
   let companiesWithoutDomain = 0;
   const logoStatus = { ready: 0, pending: 0, unresolved: 0, failed: 0 };
   if (companiesFresh.size > 0) {
-    const { data: companies, error: coErr } = await client
-      .from('companies')
-      .select('id, domain, logo_status')
-      .in('id', [...companiesFresh]);
-    if (!coErr) {
+    const companyIds = [...companiesFresh];
+    for (let offset = 0; offset < companyIds.length; offset += IN_LIST_CHUNK_SIZE) {
+      const chunk = companyIds.slice(offset, offset + IN_LIST_CHUNK_SIZE);
+      const { data: companies, error: coErr } = await client
+        .from('companies')
+        .select('id, domain, logo_status')
+        .in('id', chunk);
+      if (coErr) {
+        throwCoverageError(
+          `coverage companies chunk offset=${offset} size=${chunk.length}`,
+          coErr,
+        );
+      }
       type CompanyRow = { domain: string | null; logo_status: string | null };
       for (const row of (companies as CompanyRow[] | null) ?? []) {
         if (row.domain && row.domain.trim().length > 0) companiesWithDomain += 1;
@@ -216,8 +325,14 @@ export async function buildCoverageReport(client: SupabaseClient): Promise<Cover
     }
   }
 
+  // Prefer the paged sweep count — it is the source of truth for the
+  // classification totals. Fall back to the head count if they diverge
+  // for any reason so the report never claims a total smaller than
+  // classified rows.
+  const freshOpenJobs = Math.max(jobRows.length, totalReported);
+
   return {
-    freshOpenJobs: jobRows.length,
+    freshOpenJobs,
     byProvider,
     byWorkMode,
     byEmploymentType,

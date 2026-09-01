@@ -40,7 +40,7 @@ owns URL construction so provider hosts stay allowlisted.
 | `greenhouse` | board token | `^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$` |
 | `lever` | site slug | `^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$` |
 | `ashby` | board name | `^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$` |
-| `we_work_remotely` | singleton (`weworkremotely-all-jobs-rss`) | fixed string |
+| `we_work_remotely` | singleton (`weworkremotely-all` — canonical from 0009 / `WWR_SOURCE_IDENTIFIER`) | fixed string |
 
 Path traversal (`../…`), URL characters, query strings, and encoded slashes
 are all rejected by [`validateSourceConfig`](../src/lib/jobs/sources/registry.ts).
@@ -171,6 +171,127 @@ approved sequence is:
 9. `pnpm companies:assets --apply`  — only trusted-domain companies are
    selected by default now.
 
+## Live rollout results (2026-09-15, 0014 applied)
+
+Registry after 0014:
+
+- **30 enabled sources** — Greenhouse 10, Lever 10, Ashby 9, WWR 1.
+- 15 new direct sources seeded successfully; every `company_id` binding
+  valid; every new company row starts `domain = NULL` / `logo_status =
+  'pending'`.
+- Legacy `unresolved + domain-null + storage-null → pending` repair
+  succeeded: `bad_domainless_unresolved = 0` after the run.
+
+Bulk orchestration snapshot after expansion:
+
+```
+sources_total=30 attempted=26 succeeded=26 failed=0
+skipped_backoff=3 skipped_invalid=0
+jobs_fetched=975 accepted=842 staleSkipped=132 created=794 updated=48 unchanged=0
+```
+
+Pilots (all `snapshotComplete = true`):
+
+- **Remote / Greenhouse** — fetched 206, accepted 206, created 181, updated 25.
+- **HighLevel / Lever** — fetched 88, accepted 87, created 87, rejected 1.
+- **Ema / Ashby** — fetched 44, accepted 11, staleSkipped 33, created 11
+  (staleSkipped came from historical postings older than 30 days — the
+  Phase 5A freshness admission worked as intended).
+
+The three `skipped_backoff` rows are exactly the three pilots — expected;
+do NOT bypass backoff for testing. Post-backoff idempotency reruns are
+listed under **Pending live idempotency verification** below.
+
+## WWR registry compatibility (Phase 5E carryover fix)
+
+The initial Phase 5E validator introduced a **second** WWR string
+(`'weworkremotely-all-jobs-rss'`) that did not match the canonical
+`WWR_SOURCE_IDENTIFIER = 'weworkremotely-all'` used by the adapter and
+migration 0009. That made the audit report the existing WWR row as
+`invalid` and the bulk orchestrator classify it as `skipped_invalid`.
+
+Fix: the registry now `import`s and re-exports `WWR_SOURCE_IDENTIFIER`
+from `@/lib/jobs/adapters/wwr-http` as the **single** source of truth.
+The validator, the candidate CLI, and the adapter now share exactly one
+constant. Regression coverage in
+[`tests/unit/jobs/sources-wwr-registry.test.ts`](../tests/unit/jobs/sources-wwr-registry.test.ts).
+No migration was needed — production data was already correct.
+
+Every Phase 4D invariant is preserved: one global WWR source,
+`company_id IS NULL` at the source level, `snapshotComplete = false`,
+missing RSS entries never close jobs, employer resolved per posting.
+
+## Full-catalog coverage semantics (Phase 5E carryover fix)
+
+Supabase / PostgREST caps a single response at ~1000 rows regardless of
+`.limit()`. The initial coverage report leaned on one unbounded SELECT
+and consequently reported `1000` on a larger catalog. `buildCoverageReport`
+now:
+
+1. Issues a `head + count: 'exact'` request to learn the true total.
+2. Pages the fresh catalog in 1000-row `.range()` slices ordered by
+   `(freshness_at DESC, id DESC)` and continues until a short page
+   returns (or we cover the reported total).
+3. Fetches `job_source_postings` attribution in the same 1000-id slices.
+4. Fetches company domain / logo status in 1000-id slices.
+5. Never reads `description_html` / `description_text` — coverage uses
+   card-level columns only.
+
+The report also previously left `Providers:` blank because the `SELECT`
+list omitted `id`, so the attribution join step had no keys. Fixed by
+adding `id` to the coverage projection.
+
+### Provider count semantics
+
+`byProvider` reports **fresh canonical jobs by preferred attribution
+provider**. Each canonical job is counted exactly once under its winning
+provider, using the same direct-employer-over-aggregator precedence as
+the product's `pickAttributionLabel`
+(`greenhouse` < `lever` < `ashby` < `we_work_remotely`).
+
+A canonical job with both direct-ATS **and** WWR evidence counts once
+under the direct ATS — the aggregator only wins when it is the sole
+evidence. A canonical job with no posting evidence is classified as
+`unattributed` (never dropped). Every canonical job appears in exactly
+one bucket, so `sum(byProvider) == freshOpenJobs`.
+
+Regression coverage: 1000-boundary, 1001, 1505, 2500, zero-rows,
+attribution-across-pages, and preferred-provider precedence tests in
+[`tests/unit/jobs/sources-coverage.test.ts`](../tests/unit/jobs/sources-coverage.test.ts).
+
+## Pending live idempotency verification
+
+Run these AFTER normal backoff expires (do not force the CLI past
+`next_sync_at`). Expected: `created ≈ 0`, `unchanged` dominates for each
+source. Any `updated > 0` should correspond to a legitimate provider
+change.
+
+```bash
+pnpm jobs:sync --provider=greenhouse --source=remotecom  --apply
+pnpm jobs:sync --provider=lever      --source=gohighlevel --apply
+pnpm jobs:sync --provider=ashby      --source=ema         --apply
+```
+
+Once these three post-backoff reruns are recorded, Phase 5E moves from
+"applied + pilot" to **complete**.
+
+## Company assets (last trusted-domain run)
+
+- **Mem0** — `failed`: homepage response exceeded 400 000 bytes. Do
+  NOT weaken the SSRF safety cap for a single site. Skip Mem0 in bulk
+  runs and log the incompatibility.
+- **Netomi** — `ready` (2 956 B).
+- **TRM Labs** — `ready` (7 788 B).
+
+## Catalog data-quality follow-ups (recorded, not scoped for 5E)
+
+- Country column carries mixed representations (`IN` / `India`,
+  `US` / `United States`, other provider variants). Normalization is
+  future work.
+- A few WWR-ingested company names still contain lightly-mis-decoded
+  ampersands (`E. Breuninger& Co.`, `E. Breuninger&amp; Co.`). No
+  broad normalization migration in this closeout.
+
 ## Known limitations
 
 - No cron. Automated scheduling remains Phase 10.
@@ -180,3 +301,5 @@ approved sequence is:
   Phase 10.
 - Structured job-skill search still deferred (adapters do not populate
   `job_skills`).
+- Free-text country / company-name normalization is a data-quality
+  follow-up (see above).
